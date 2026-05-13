@@ -42,6 +42,9 @@ class NotificationConfig:
     button_text: str = "Open Arches"
     link_path: str = "/index.htm"
     resource_name: ResourceNameConfig = field(default_factory=ResourceNameConfig)
+    # Optional: only fire when this node within the nodegroup has changed.
+    # Empty / None means "fire on any tile save in the nodegroup".
+    node_alias: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "NotificationConfig":
@@ -55,4 +58,5 @@ class NotificationConfig:
             button_text=data.get("button_text", "Open Arches"),
             link_path=data.get("link_path", "/index.htm"),
             resource_name=ResourceNameConfig.from_dict(data.get("resource_name") or {}),
+            node_alias=data.get("node_alias") or None,
         )

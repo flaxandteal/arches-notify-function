@@ -31,21 +31,38 @@ class GraphNodegroupsView(View):
             if not graph:
                 return JsonResponse({"error": "Graph not found"}, status=404)
 
-        nodegroups = (
+        # All nodes that belong to a nodegroup, in one query — bucket them
+        # into nodegroups in Python so the panel can offer a per-nodegroup
+        # node picker for change-detection rules.
+        rows = (
             Node.objects.filter(graph=graph, nodegroup__isnull=False)
-            .order_by("nodegroup_id", "alias")
-            .distinct("nodegroup_id")
-            .values("nodegroup_id", "alias", "name")
+            .values("nodegroup_id", "alias", "name", "nodeid", "datatype")
         )
-        results = sorted(
-            (
+
+        by_nodegroup: dict[str, dict] = {}
+        for r in rows:
+            ng_id = str(r["nodegroup_id"])
+            bucket = by_nodegroup.setdefault(
+                ng_id,
+                {"nodegroup_id": ng_id, "alias": None, "name": None, "nodes": []},
+            )
+            bucket["nodes"].append(
                 {
-                    "nodegroup_id": str(ng["nodegroup_id"]),
-                    "alias": ng["alias"],
-                    "name": ng["name"],
+                    "node_id": str(r["nodeid"]),
+                    "alias": r["alias"],
+                    "name": r["name"],
+                    "datatype": r["datatype"],
                 }
-                for ng in nodegroups
-            ),
-            key=lambda r: r["alias"] or "",
-        )
+            )
+            # Pick the node whose nodeid matches the nodegroup_id as the
+            # nodegroup's representative alias/name (the "top" node of the
+            # nodegroup). Fall back to first encountered otherwise.
+            if str(r["nodeid"]) == ng_id or bucket["alias"] is None:
+                bucket["alias"] = r["alias"]
+                bucket["name"] = r["name"]
+
+        results = sorted(by_nodegroup.values(), key=lambda b: b["alias"] or "")
+        for b in results:
+            b["nodes"].sort(key=lambda n: n["alias"] or "")
+
         return JsonResponse({"nodegroups": results})

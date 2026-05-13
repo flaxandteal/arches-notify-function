@@ -12,6 +12,7 @@ import Checkbox from "primevue/checkbox";
 import type {
     GroupOption,
     NodegroupOption,
+    NodeOption,
     NotificationRule,
     NotificationTypeOption,
 } from "./types";
@@ -34,8 +35,25 @@ const resourceNameExpanded = ref(false);
 const selectedNodegroup = computed({
     get: () =>
         props.nodegroups.find((n) => n.alias === props.rule.nodegroup_alias) ?? null,
-    set: (val: NodegroupOption | null) =>
-        update("nodegroup_alias", val?.name ?? ""),
+    set: (val: NodegroupOption | null) => {
+        // Changing nodegroup invalidates any chosen node — clear it.
+        emit("update:rule", {
+            ...props.rule,
+            nodegroup_alias: val?.alias ?? "",
+            node_alias: null,
+        });
+    },
+});
+
+const nodeOptions = computed<NodeOption[]>(
+    () => selectedNodegroup.value?.nodes ?? [],
+);
+
+const selectedNode = computed({
+    get: () =>
+        nodeOptions.value.find((n) => n.alias === props.rule.node_alias) ?? null,
+    set: (val: NodeOption | null) =>
+        update("node_alias", val?.alias ?? null),
 });
 
 const selectedType = computed({
@@ -81,8 +99,10 @@ function updateResourceName(
 }
 
 const ruleLabel = computed(() => {
-    if (props.rule.nodegroup_alias) {
-        return props.rule.nodegroup_alias;
+    const ng = selectedNodegroup.value;
+    if (ng) {
+        const node = selectedNode.value;
+        return node ? `${ng.name} — ${node.name}` : ng.name;
     }
     return `Rule ${props.index + 1}`;
 });
@@ -113,9 +133,23 @@ const ruleLabel = computed(() => {
                 <Select
                     v-model="selectedNodegroup"
                     :options="nodegroups"
-                    option-label="alias"
+                    option-label="name"
                     placeholder="Select nodegroup…"
                     class="w-full"
+                    filter
+                />
+            </div>
+
+            <div class="field">
+                <label>Specific node (optional — fire only when this node changes)</label>
+                <Select
+                    v-model="selectedNode"
+                    :options="nodeOptions"
+                    option-label="name"
+                    placeholder="Any node in this nodegroup"
+                    class="w-full"
+                    :disabled="!selectedNodegroup"
+                    show-clear
                     filter
                 />
             </div>
@@ -237,15 +271,18 @@ const ruleLabel = computed(() => {
 </template>
 
 <style scoped>
+.label {
+    margin-bottom: unset;
+}
+
 .rule-label {
     font-weight: 600;
-    font-size: 0.9rem;
 }
 
 .rule-fields {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
 }
 
 .field {
@@ -255,15 +292,16 @@ const ruleLabel = computed(() => {
 }
 
 .field label {
-    font-size: 1rem;
+    font-size: 1.2rem;
     color: var(--p-text-muted-color, #6b7280);
     font-weight: 500;
 }
 
 .field--inline {
-    flex-direction: row;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.5rem;
 }
 
 .email-field {

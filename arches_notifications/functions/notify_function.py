@@ -77,6 +77,20 @@ class NotifyFunction(BaseFunction):
 
     # Per-class cache of (alias, graph_slug) → UUID string, populated lazily.
     _alias_uuid_cache: dict[tuple[str, str], str] = {}
+    _node_uuid_cache: dict[tuple[str, str], str] = {}
+
+    def save(self, tile, request: HttpRequest, context: dict | None = None) -> None:
+        """Pre-save hook. Stash the prior tile data on the tile instance only
+        if at least one matching rule wants change detection (i.e. has
+        node_alias set). Otherwise we skip the DB lookup entirely."""
+        nodegroup_id = str(tile.nodegroup_id)
+        graph_slug = tile.resourceinstance.graph.slug
+        configs = self._configs_for_tile(nodegroup_id, graph_slug)
+        if not any(c.node_alias for c in configs):
+            return
+        from arches.app.models.models import TileModel
+        existing = TileModel.objects.filter(pk=tile.pk).first()
+        tile._notify_pre_save_data = existing.data if existing else {}
 
     def post_save(self, tile, request: HttpRequest, context: dict | None = None) -> None:
         nodegroup_id = str(tile.nodegroup_id)
@@ -84,6 +98,8 @@ class NotifyFunction(BaseFunction):
         user = self._get_user(request)
 
         for config in self._configs_for_tile(nodegroup_id, graph_slug):
+            if config.node_alias and not self._node_changed(tile, config.node_alias, graph_slug):
+                continue
             strategy_class = type(self).strategy_overrides.get(
                 config.nodegroup_alias, NotificationStrategy
             )
@@ -108,6 +124,23 @@ class NotifyFunction(BaseFunction):
             node = Node.objects.filter(alias=alias, graph__slug=graph_slug).first()
             cls._alias_uuid_cache[cache_key] = str(node.nodegroup_id) if node else alias
         return cls._alias_uuid_cache[cache_key]
+
+    def _resolve_node_alias(self, alias: str, graph_slug: str) -> str:
+        """Return the node UUID string for a node alias, cached per class."""
+        cls = type(self)
+        cache_key = (alias, graph_slug)
+        if cache_key not in cls._node_uuid_cache:
+            from arches.app.models.models import Node
+            node = Node.objects.filter(alias=alias, graph__slug=graph_slug).first()
+            cls._node_uuid_cache[cache_key] = str(node.nodeid) if node else alias
+        return cls._node_uuid_cache[cache_key]
+
+    def _node_changed(self, tile, node_alias: str, graph_slug: str) -> bool:
+        """True if the named node's value differs from the pre-save data."""
+        node_id = self._resolve_node_alias(node_alias, graph_slug)
+        before = (getattr(tile, "_notify_pre_save_data", {}) or {}).get(node_id)
+        after = (tile.data or {}).get(node_id)
+        return before != after
 
     @staticmethod
     def _get_user(request: HttpRequest) -> User | None:

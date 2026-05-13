@@ -12,6 +12,8 @@ export const DEFAULT_NOTIFICATION_TYPE_ID =
 
 export interface NotificationRule {
     nodegroup_alias: string;
+    // Optional: when set, fire only if THIS node's value changed.
+    node_alias: string | null;
     notiftype_id: string;
     groups_to_notify: string[];
     message: string;
@@ -25,10 +27,18 @@ export interface NotificationPanelConfig {
     nodegroups: NotificationRule[];
 }
 
+export interface NodeOption {
+    node_id: string;
+    alias: string;
+    name: string;
+    datatype: string;
+}
+
 export interface NodegroupOption {
     nodegroup_id: string;
     alias: string;
     name: string;
+    nodes: NodeOption[];
 }
 
 export interface NotificationTypeOption {
@@ -46,6 +56,7 @@ export interface GroupOption {
 export function emptyRule(): NotificationRule {
     return {
         nodegroup_alias: "",
+        node_alias: null,
         notiftype_id: DEFAULT_NOTIFICATION_TYPE_ID,
         groups_to_notify: [],
         message: "",

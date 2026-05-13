@@ -178,7 +178,6 @@ function updateRule(index: number, rule: NotificationRule) {
 
 .panel-title {
     margin: 0;
-    font-size: 1rem;
     font-weight: 600;
 }
 
