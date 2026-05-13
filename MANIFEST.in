@@ -1,0 +1,2 @@
+recursive-include arches_notifications/templates *
+recursive-include arches_notifications/locale *
