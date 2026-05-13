@@ -4,6 +4,12 @@ export interface ResourceNameConfig {
     strip_suffix: string | null;
 }
 
+// Matches the well-known UUID set by migration 0001_notification_type and
+// notification_config.DEFAULT_NOTIFICATION_TYPE_ID. Used as the dropdown's
+// default selection; users can change it per rule.
+export const DEFAULT_NOTIFICATION_TYPE_ID =
+    "a85b3f1c-7d4e-4d5a-9b5e-2a3b4c5d6e7f";
+
 export interface NotificationRule {
     nodegroup_alias: string;
     notiftype_id: string;
@@ -40,7 +46,7 @@ export interface GroupOption {
 export function emptyRule(): NotificationRule {
     return {
         nodegroup_alias: "",
-        notiftype_id: "",
+        notiftype_id: DEFAULT_NOTIFICATION_TYPE_ID,
         groups_to_notify: [],
         message: "",
         email: false,

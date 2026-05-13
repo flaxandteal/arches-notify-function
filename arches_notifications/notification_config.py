@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 from uuid import UUID
 
+# Created by migration 0001_notification_type. Used as the default when a
+# rule does not specify its own type. Override by editing the rule's JSON
+# config directly if you want a different NotificationType per rule.
+DEFAULT_NOTIFICATION_TYPE_ID = UUID("a85b3f1c-7d4e-4d5a-9b5e-2a3b4c5d6e7f")
+
 
 @dataclass
 class ResourceNameConfig:
@@ -31,7 +36,7 @@ class ResourceNameConfig:
 class NotificationConfig:
     nodegroup_alias: str
     message: str
-    notiftype_id: UUID
+    notiftype_id: UUID = DEFAULT_NOTIFICATION_TYPE_ID
     groups_to_notify: list[str] = field(default_factory=list)
     email: bool = False
     button_text: str = "Open Arches"
@@ -40,10 +45,11 @@ class NotificationConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> "NotificationConfig":
+        raw_type_id = data.get("notiftype_id")
         return cls(
             nodegroup_alias=data["nodegroup_alias"],
             message=data["message"],
-            notiftype_id=UUID(data["notiftype_id"]),
+            notiftype_id=UUID(raw_type_id) if raw_type_id else DEFAULT_NOTIFICATION_TYPE_ID,
             groups_to_notify=data.get("groups_to_notify", []),
             email=data.get("email", False),
             button_text=data.get("button_text", "Open Arches"),
