@@ -33,16 +33,19 @@ class GraphNodegroupsView(View):
 
         nodegroups = (
             Node.objects.filter(graph=graph, nodegroup__isnull=False)
-            .values("nodegroup_id", "alias", "name")
-            .order_by("alias")
+            .order_by("nodegroup_id", "alias")
             .distinct("nodegroup_id")
+            .values("nodegroup_id", "alias", "name")
         )
-        results = [
-            {
-                "nodegroup_id": str(ng["nodegroup_id"]),
-                "alias": ng["alias"],
-                "name": ng["name"],
-            }
-            for ng in nodegroups
-        ]
+        results = sorted(
+            (
+                {
+                    "nodegroup_id": str(ng["nodegroup_id"]),
+                    "alias": ng["alias"],
+                    "name": ng["name"],
+                }
+                for ng in nodegroups
+            ),
+            key=lambda r: r["alias"] or "",
+        )
         return JsonResponse({"nodegroups": results})
