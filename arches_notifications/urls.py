@@ -1,21 +1,16 @@
 from django.urls import path
 
-from .views import GraphNodegroupsView, GroupsView, NotificationTypesView
+from .views import GraphNodegroupsView, GroupsView
 
 urlpatterns = [
     path(
-        "api/notifications/types",
-        NotificationTypesView.as_view(),
-        name="arches_notifications_types",
-    ),
-    path(
         "api/notifications/groups",
         GroupsView.as_view(),
-        name="arches_notifications_groups",
+        name="notification_groups",
     ),
     path(
         "api/notifications/nodegroups/<str:graph_id>",
         GraphNodegroupsView.as_view(),
-        name="arches_notifications_nodegroups",
+        name="notification_nodegroups",
     ),
 ]

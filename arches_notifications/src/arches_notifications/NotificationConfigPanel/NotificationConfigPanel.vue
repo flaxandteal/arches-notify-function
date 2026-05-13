@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import Message from "primevue/message";
 
 import NotificationTriggerEntry from "./NotificationTriggerEntry.vue";
+import { fetchGroups, fetchNodegroups, fetchNotificationTypes } from "./api";
 import {
     emptyTrigger,
     type GroupOption,
@@ -31,7 +32,14 @@ const loading = ref(true);
 
 onMounted(async () => {
     try {
-        await Promise.all([fetchNodegroups(), fetchNotificationTypes(), fetchGroups()]);
+        const [ng, types, grps] = await Promise.all([
+            fetchNodegroups(props.graphId),
+            fetchNotificationTypes(),
+            fetchGroups(),
+        ]);
+        nodegroups.value = ng;
+        notificationTypes.value = types;
+        groups.value = grps;
     } catch (e) {
         loadError.value = "Failed to load configuration options. Check the console for details.";
         console.error(e);
@@ -39,24 +47,6 @@ onMounted(async () => {
         loading.value = false;
     }
 });
-
-async function fetchNodegroups() {
-    const res = await fetch(`/api/notifications/nodegroups/${props.graphId}`);
-    const data = await res.json();
-    nodegroups.value = data.nodegroups ?? [];
-}
-
-async function fetchNotificationTypes() {
-    const res = await fetch("/api/notifications/types");
-    const data = await res.json();
-    notificationTypes.value = data.notification_types ?? [];
-}
-
-async function fetchGroups() {
-    const res = await fetch("/api/notifications/groups");
-    const data = await res.json();
-    groups.value = data.groups ?? [];
-}
 
 function addTrigger() {
     emit("update:modelValue", {
