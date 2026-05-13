@@ -4,14 +4,14 @@ import { onMounted, ref } from "vue";
 import Button from "primevue/button";
 import Message from "primevue/message";
 
-import NotificationTriggerEntry from "./NotificationTriggerEntry.vue";
+import NotificationRuleEntry from "./NotificationRuleEntry.vue";
 import { fetchGroups, fetchNodegroups, fetchNotificationTypes } from "./api";
 import {
-    emptyTrigger,
+    emptyRule,
     type GroupOption,
     type NodegroupOption,
     type NotificationPanelConfig,
-    type NotificationTrigger,
+    type NotificationRule,
     type NotificationTypeOption,
 } from "./types";
 
@@ -48,20 +48,20 @@ onMounted(async () => {
     }
 });
 
-function addTrigger() {
+function addRule() {
     emit("update:modelValue", {
-        nodegroups: [...props.modelValue.nodegroups, emptyTrigger()],
+        nodegroups: [...props.modelValue.nodegroups, emptyRule()],
     });
 }
 
-function removeTrigger(index: number) {
+function removeRule(index: number) {
     const updated = props.modelValue.nodegroups.filter((_, i) => i !== index);
     emit("update:modelValue", { nodegroups: updated });
 }
 
-function updateTrigger(index: number, trigger: NotificationTrigger) {
-    const updated = props.modelValue.nodegroups.map((t, i) =>
-        i === index ? trigger : t,
+function updateRule(index: number, rule: NotificationRule) {
+    const updated = props.modelValue.nodegroups.map((r, i) =>
+        i === index ? rule : r,
     );
     emit("update:modelValue", { nodegroups: updated });
 }
@@ -70,14 +70,14 @@ function updateTrigger(index: number, trigger: NotificationTrigger) {
 <template>
     <div class="notification-config-panel">
         <div class="panel-header">
-            <h3 class="panel-title">Notification Triggers</h3>
+            <h3 class="panel-title">Notification Rules</h3>
             <Button
                 icon="pi pi-plus"
-                label="Add trigger"
+                label="Add rule"
                 size="small"
                 outlined
                 :disabled="loading"
-                @click="addTrigger"
+                @click="addRule"
             />
         </div>
 
@@ -101,20 +101,20 @@ function updateTrigger(index: number, trigger: NotificationTrigger) {
                 v-if="modelValue.nodegroups.length === 0"
                 class="empty-state"
             >
-                No triggers configured. Add one to send notifications when a tile is saved.
+                No rules configured. Add one to send notifications when a tile is saved.
             </p>
 
-            <div class="trigger-list">
-                <NotificationTriggerEntry
-                    v-for="(trigger, i) in modelValue.nodegroups"
+            <div class="rule-list">
+                <NotificationRuleEntry
+                    v-for="(rule, i) in modelValue.nodegroups"
                     :key="i"
-                    :trigger="trigger"
+                    :rule="rule"
                     :index="i"
                     :nodegroups="nodegroups"
                     :notification-types="notificationTypes"
                     :groups="groups"
-                    @update:trigger="updateTrigger(i, $event)"
-                    @remove="removeTrigger(i)"
+                    @update:rule="updateRule(i, $event)"
+                    @remove="removeRule(i)"
                 />
             </div>
         </template>
@@ -141,7 +141,7 @@ function updateTrigger(index: number, trigger: NotificationTrigger) {
     font-weight: 600;
 }
 
-.trigger-list {
+.rule-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;

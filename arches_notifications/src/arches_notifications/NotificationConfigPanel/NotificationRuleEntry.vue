@@ -12,12 +12,12 @@ import ToggleSwitch from "primevue/toggleswitch";
 import type {
     GroupOption,
     NodegroupOption,
-    NotificationTrigger,
+    NotificationRule,
     NotificationTypeOption,
 } from "./types";
 
 const props = defineProps<{
-    trigger: NotificationTrigger;
+    rule: NotificationRule;
     index: number;
     nodegroups: NodegroupOption[];
     notificationTypes: NotificationTypeOption[];
@@ -25,7 +25,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    (e: "update:trigger", value: NotificationTrigger): void;
+    (e: "update:rule", value: NotificationRule): void;
     (e: "remove"): void;
 }>();
 
@@ -33,60 +33,60 @@ const resourceNameExpanded = ref(false);
 
 const selectedNodegroup = computed({
     get: () =>
-        props.nodegroups.find((n) => n.alias === props.trigger.nodegroup_alias) ?? null,
+        props.nodegroups.find((n) => n.alias === props.rule.nodegroup_alias) ?? null,
     set: (val: NodegroupOption | null) =>
         update("nodegroup_alias", val?.alias ?? ""),
 });
 
 const selectedType = computed({
     get: () =>
-        props.notificationTypes.find((t) => t.typeid === props.trigger.notiftype_id) ?? null,
+        props.notificationTypes.find((t) => t.typeid === props.rule.notiftype_id) ?? null,
     set: (val: NotificationTypeOption | null) =>
         update("notiftype_id", val?.typeid ?? ""),
 });
 
 const selectedGroups = computed({
     get: () =>
-        props.groups.filter((g) => props.trigger.groups_to_notify.includes(g.name)),
+        props.groups.filter((g) => props.rule.groups_to_notify.includes(g.name)),
     set: (val: GroupOption[]) =>
         update("groups_to_notify", val.map((g) => g.name)),
 });
 
-function update<K extends keyof NotificationTrigger>(
+function update<K extends keyof NotificationRule>(
     key: K,
-    value: NotificationTrigger[K],
+    value: NotificationRule[K],
 ) {
-    emit("update:trigger", { ...props.trigger, [key]: value });
+    emit("update:rule", { ...props.rule, [key]: value });
 }
 
 function updateResourceName(
-    key: keyof NotificationTrigger["resource_name"],
+    key: keyof NotificationRule["resource_name"],
     value: string,
 ) {
-    emit("update:trigger", {
-        ...props.trigger,
+    emit("update:rule", {
+        ...props.rule,
         resource_name: {
-            ...props.trigger.resource_name,
+            ...props.rule.resource_name,
             [key]: value || null,
         },
     });
 }
 
-const triggerLabel = computed(() => {
-    if (props.trigger.nodegroup_alias) {
-        return props.trigger.nodegroup_alias;
+const ruleLabel = computed(() => {
+    if (props.rule.nodegroup_alias) {
+        return props.rule.nodegroup_alias;
     }
-    return `Trigger ${props.index + 1}`;
+    return `Rule ${props.index + 1}`;
 });
 </script>
 
 <template>
     <Panel
-        class="trigger-entry"
+        class="rule-entry"
         toggleable
     >
         <template #header>
-            <span class="trigger-label">{{ triggerLabel }}</span>
+            <span class="rule-label">{{ ruleLabel }}</span>
         </template>
         <template #icons>
             <Button
@@ -94,12 +94,12 @@ const triggerLabel = computed(() => {
                 text
                 severity="danger"
                 size="small"
-                aria-label="Remove trigger"
+                aria-label="Remove rule"
                 @click.stop="emit('remove')"
             />
         </template>
 
-        <div class="trigger-fields">
+        <div class="rule-fields">
             <div class="field">
                 <label>Nodegroup</label>
                 <Select
@@ -139,7 +139,7 @@ const triggerLabel = computed(() => {
             <div class="field">
                 <label>Message</label>
                 <Textarea
-                    :model-value="trigger.message"
+                    :model-value="rule.message"
                     rows="2"
                     class="w-full"
                     placeholder="Use {name} for the resource display name"
@@ -150,16 +150,16 @@ const triggerLabel = computed(() => {
             <div class="field field--inline">
                 <label>Send email</label>
                 <ToggleSwitch
-                    :model-value="trigger.email"
+                    :model-value="rule.email"
                     @update:model-value="update('email', $event)"
                 />
             </div>
 
-            <template v-if="trigger.email">
+            <template v-if="rule.email">
                 <div class="field email-field">
                     <label>Button text</label>
                     <InputText
-                        :model-value="trigger.button_text"
+                        :model-value="rule.button_text"
                         class="w-full"
                         @update:model-value="update('button_text', $event)"
                     />
@@ -167,7 +167,7 @@ const triggerLabel = computed(() => {
                 <div class="field email-field">
                     <label>Link path</label>
                     <InputText
-                        :model-value="trigger.link_path"
+                        :model-value="rule.link_path"
                         class="w-full"
                         placeholder="/index.htm"
                         @update:model-value="update('link_path', $event)"
@@ -193,7 +193,7 @@ const triggerLabel = computed(() => {
                         <div class="field">
                             <label>Require prefix (skip if name doesn't start with this)</label>
                             <InputText
-                                :model-value="trigger.resource_name.require_prefix ?? ''"
+                                :model-value="rule.resource_name.require_prefix ?? ''"
                                 class="w-full"
                                 placeholder="e.g. HM-"
                                 @update:model-value="updateResourceName('require_prefix', $event)"
@@ -203,7 +203,7 @@ const triggerLabel = computed(() => {
                             <div class="field">
                                 <label>Strip prefix</label>
                                 <InputText
-                                    :model-value="trigger.resource_name.strip_prefix ?? ''"
+                                    :model-value="rule.resource_name.strip_prefix ?? ''"
                                     class="w-full"
                                     @update:model-value="
                                         updateResourceName('strip_prefix', $event)
@@ -213,7 +213,7 @@ const triggerLabel = computed(() => {
                             <div class="field">
                                 <label>Strip suffix</label>
                                 <InputText
-                                    :model-value="trigger.resource_name.strip_suffix ?? ''"
+                                    :model-value="rule.resource_name.strip_suffix ?? ''"
                                     class="w-full"
                                     @update:model-value="
                                         updateResourceName('strip_suffix', $event)
@@ -229,12 +229,12 @@ const triggerLabel = computed(() => {
 </template>
 
 <style scoped>
-.trigger-label {
+.rule-label {
     font-weight: 600;
     font-size: 0.9rem;
 }
 
-.trigger-fields {
+.rule-fields {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;

@@ -4,7 +4,7 @@ export interface ResourceNameConfig {
     strip_suffix: string | null;
 }
 
-export interface NotificationTrigger {
+export interface NotificationRule {
     nodegroup_alias: string;
     notiftype_id: string;
     groups_to_notify: string[];
@@ -16,7 +16,7 @@ export interface NotificationTrigger {
 }
 
 export interface NotificationPanelConfig {
-    nodegroups: NotificationTrigger[];
+    nodegroups: NotificationRule[];
 }
 
 export interface NodegroupOption {
@@ -37,7 +37,7 @@ export interface GroupOption {
     name: string;
 }
 
-export function emptyTrigger(): NotificationTrigger {
+export function emptyRule(): NotificationRule {
     return {
         nodegroup_alias: "",
         notiftype_id: "",
