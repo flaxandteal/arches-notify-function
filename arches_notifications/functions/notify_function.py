@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from arches.app.functions.base import BaseFunction
 
-from .notification_config import NotificationConfig
-from .notification_base_strategy import NotificationStrategy
+from arches_notifications.notification_config import NotificationConfig
+from arches_notifications.notification_base_strategy import NotificationStrategy
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -78,7 +78,7 @@ class NotifyFunction(BaseFunction):
     # Per-class cache of (alias, graph_slug) → UUID string, populated lazily.
     _alias_uuid_cache: dict[tuple[str, str], str] = {}
 
-    def post_save(self, tile, request: HttpRequest, _context: dict) -> None:
+    def post_save(self, tile, request: HttpRequest, context: dict | None = None) -> None:
         nodegroup_id = str(tile.nodegroup_id)
         graph_slug = tile.resourceinstance.graph.slug
         user = self._get_user(request)
