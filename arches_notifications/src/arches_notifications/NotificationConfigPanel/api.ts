@@ -4,7 +4,7 @@ import type {
     GroupOption,
     NodegroupOption,
     NotificationTypeOption,
-} from "./types";
+} from "./types.ts";
 
 export async function fetchNotificationTypes(): Promise<NotificationTypeOption[]> {
     const res = await fetch(arches.urls.get_notification_types);

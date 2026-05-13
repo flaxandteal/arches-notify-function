@@ -1,0 +1,9 @@
+{% extends "arches_urls.htm" %}
+
+{% block arches_urls %}
+{{ block.super }}
+<div class="arches-urls"
+    notification_groups="{% url 'notification_groups' %}"
+    notification_nodegroups='(graphId) => { return "{% url "notification_nodegroups" "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" %}".replace("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", graphId)}'
+></div>
+{% endblock arches_urls %}
