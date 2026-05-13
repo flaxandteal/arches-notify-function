@@ -1,15 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import UUID
 
 
 @dataclass
 class ResourceNameConfig:
-    require_prefix: Optional[str] = None
-    strip_prefix: Optional[str] = None
-    strip_suffix: Optional[str] = None
+    require_prefix: str | None = None
+    strip_prefix: str | None = None
+    strip_suffix: str | None = None
 
-    def apply(self, name: str) -> Optional[str]:
+    def apply(self, name: str) -> str | None:
         """Return cleaned name, or None if the require_prefix filter fails."""
         if self.require_prefix and not name.startswith(self.require_prefix):
             return None
@@ -20,7 +19,7 @@ class ResourceNameConfig:
         return name
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ResourceNameConfig":
+    def from_dict(cls, data: dict[str, str | None]) -> "ResourceNameConfig":
         return cls(
             require_prefix=data.get("require_prefix"),
             strip_prefix=data.get("strip_prefix"),

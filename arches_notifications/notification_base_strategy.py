@@ -1,11 +1,26 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from arches.app.models import models
 from arches.app.models.resource import Resource
 
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
+    from django.http import HttpRequest
+
+    from .notification_config import NotificationConfig
+
 
 class NotificationStrategy:
-    def __init__(self, tile, request, user, config):
+    def __init__(
+        self,
+        tile: models.Tile,
+        request: HttpRequest,
+        user: User | None,
+        config: NotificationConfig,
+    ) -> None:
         self.request = request
         self.tile = tile
         self.resource_instance_id = str(tile.resourceinstance.resourceinstanceid)
@@ -14,7 +29,7 @@ class NotificationStrategy:
         self.name = self._get_resource_name()
         self.notification: models.Notification | None = None
 
-    def send_notification(self):
+    def send_notification(self) -> None:
         if self.name is None:
             # resource_name.require_prefix filter failed
             return
@@ -67,7 +82,7 @@ class NotificationStrategy:
         return latest is not None and latest.message == message
 
     def _create_notification(self, message: str) -> models.Notification:
-        context = {
+        context: dict = {
             "resource_instance_id": self.resource_instance_id,
             "resource_id": self.name,
         }
@@ -89,7 +104,7 @@ class NotificationStrategy:
         notification.save()
         return notification
 
-    def _get_recipients(self) -> list:
+    def _get_recipients(self) -> list[User]:
         from django.contrib.auth.models import User
         return list(
             User.objects.filter(groups__name__in=self.config.groups_to_notify)
@@ -97,14 +112,14 @@ class NotificationStrategy:
             .distinct()
         )
 
-    def notify_user(self, user) -> None:
+    def notify_user(self, user: User) -> None:
         if self.config.email:
             notif = self._clone_notification_for_user(user)
         else:
             notif = self.notification
         models.UserXNotification(notif=notif, recipient=user).save()
 
-    def _clone_notification_for_user(self, user) -> models.Notification:
+    def _clone_notification_for_user(self, user: User) -> models.Notification:
         context = {**self.notification.context, "username": user.username, "email": user.email}
         notif = models.Notification(
             message=self.notification.message,
@@ -114,7 +129,9 @@ class NotificationStrategy:
         notif.save()
         return notif
 
-    def get_domain_value_string(self, value_id: str, node_id: str, language: str | None = None) -> str | None:
+    def get_domain_value_string(
+        self, value_id: str, node_id: str, language: str | None = None
+    ) -> str | None:
         from django.conf import settings
         lang = language or getattr(settings, "LANGUAGE_CODE", "en")
         node = models.Node.objects.filter(pk=node_id).first()
