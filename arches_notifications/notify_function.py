@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 
+# Read by `python manage.py fn register --source <path>/notify_function.py`.
+# triggering_nodegroups stays [] so Arches fires post_save for every nodegroup;
+# per-nodegroup routing happens in _configs_for_tile.
+details = {
+    "functionid": "f5a0e2b0-1c3e-4a8f-9d2c-1a2b3c4d5e6f",
+    "name": "Notify on tile save",
+    "type": "node",
+    "description": "Sends notifications to configured groups when matching tiles are saved.",
+    "defaultconfig": {"triggering_nodegroups": [], "nodegroups": []},
+    "classname": "NotifyFunction",
+    "component": "views/components/functions/notify",
+}
+
+
 class NotifyFunction(BaseFunction):
     """Concrete, installable Arches function that sends notifications on tile save.
 
@@ -20,6 +34,15 @@ class NotifyFunction(BaseFunction):
         configure nodegroup triggers via the UI. Config is stored as JSON on
         the FunctionXGraph record and deserialized into NotificationConfig
         instances at runtime.
+
+    Config storage:
+        On the FunctionXGraph row, set ``config.triggering_nodegroups = []`` so
+        Arches' Tile dispatcher (arches.app.models.tile._getFunctionClassInstances)
+        fires post_save for every nodegroup on the graph. Per-nodegroup routing
+        is then done internally against ``config.nodegroups`` — the rule list
+        edited via NotificationConfigPanel. Keeping triggering_nodegroups empty
+        means the panel's rule list is the single source of truth and the two
+        don't drift out of sync.
 
     Tier 2 — strategy overrides (subclass for custom logic):
         Subclass NotifyFunction and declare strategy_overrides to plug in
