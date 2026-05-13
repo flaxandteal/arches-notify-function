@@ -271,7 +271,7 @@ const ruleLabel = computed(() => {
 </template>
 
 <style scoped>
-.label {
+label {
     margin-bottom: unset;
 }
 
