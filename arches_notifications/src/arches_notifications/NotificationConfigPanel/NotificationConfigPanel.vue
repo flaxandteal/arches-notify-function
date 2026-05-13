@@ -185,6 +185,10 @@ function updateRule(index: number, rule: NotificationRule) {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    max-height: 70vh;
+    overflow-y: auto;
+    /* Keep scrollbar off the right edge of rule cards */
+    padding-right: 0.25rem;
 }
 
 .empty-state {
