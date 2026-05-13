@@ -28,7 +28,7 @@ export default ko.components.register("views/components/functions/notify", {
     viewModel: function (params) {
         FunctionViewModel.apply(this, arguments);
 
-        this.mountId = "notify-config-mount-" + ko.utils.randomMinMax(0, 1e9).toFixed(0);
+        this.mountId = "notify-config-mount-" + crypto.randomUUID();
 
         const ensureShape = (snapshot) => ({
             ...snapshot,
@@ -44,7 +44,6 @@ export default ko.components.register("views/components/functions/notify", {
             const merged = ensureShape({ ...koMapping.toJS(this.config), ...next });
             koMapping.fromJS(merged, this.config);
         };
-
         const mount = () => {
             const target = document.getElementById(this.mountId);
             if (!target) {

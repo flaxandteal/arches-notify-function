@@ -7,7 +7,7 @@ import MultiSelect from "primevue/multiselect";
 import Panel from "primevue/panel";
 import Select from "primevue/select";
 import Textarea from "primevue/textarea";
-import ToggleSwitch from "primevue/toggleswitch";
+import Checkbox from "primevue/checkbox";
 
 import type {
     GroupOption,
@@ -35,7 +35,7 @@ const selectedNodegroup = computed({
     get: () =>
         props.nodegroups.find((n) => n.alias === props.rule.nodegroup_alias) ?? null,
     set: (val: NodegroupOption | null) =>
-        update("nodegroup_alias", val?.alias ?? ""),
+        update("nodegroup_alias", val?.name ?? ""),
 });
 
 const selectedType = computed({
@@ -50,6 +50,14 @@ const selectedGroups = computed({
         props.groups.filter((g) => props.rule.groups_to_notify.includes(g.name)),
     set: (val: GroupOption[]) =>
         update("groups_to_notify", val.map((g) => g.name)),
+});
+
+const emailEnabled = computed({
+    get: () => !!props.rule.email,
+    set: (val: boolean) => {
+        console.log("toggle", val);
+        update("email", !!val);
+    },
 });
 
 function update<K extends keyof NotificationRule>(
@@ -149,9 +157,9 @@ const ruleLabel = computed(() => {
 
             <div class="field field--inline">
                 <label>Send email</label>
-                <ToggleSwitch
-                    :model-value="rule.email"
-                    @update:model-value="update('email', $event)"
+                <Checkbox
+                    v-model="emailEnabled"
+                    binary
                 />
             </div>
 
@@ -247,7 +255,7 @@ const ruleLabel = computed(() => {
 }
 
 .field label {
-    font-size: 0.8rem;
+    font-size: 1rem;
     color: var(--p-text-muted-color, #6b7280);
     font-weight: 500;
 }
