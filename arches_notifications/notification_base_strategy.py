@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import re
 from typing import TYPE_CHECKING
 
 from arches.app.models import models
@@ -11,6 +11,13 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from .notification_config import NotificationConfig
+
+
+# Matches {name} and {value:<node_alias>} tokens in a rule's message.
+# Alias chars match what Arches allows: lowercase, digits, underscore, hyphen.
+_MESSAGE_TOKEN_RE = re.compile(
+    r"\{(name|value:([a-z0-9_\-]+))\}", re.IGNORECASE
+)
 
 
 class NotificationStrategy:
@@ -31,16 +38,10 @@ class NotificationStrategy:
 
     def send_notification(self) -> None:
         if self.name is None:
-            # resource_name.require_prefix filter failed
+            # require_prefix filter explicitly rejected this resource.
             return
 
-        message = self.config.message.format(name=self.name)
-
-        if self._is_duplicate(message):
-            logging.debug(
-                "Skipping duplicate notification for resource %s", self.resource_instance_id
-            )
-            return
+        message = self._render_message(self.config.message)
 
         recipients = self._get_recipients()
         if not recipients:
@@ -65,34 +66,48 @@ class NotificationStrategy:
         return {}
 
     def _get_resource_name(self) -> str | None:
-        raw = Resource.objects.get(pk=self.resource_instance_id).displayname()
-        return self.config.resource_name.apply(raw) if raw else raw
+        """Resolve the resource display name, applying the rule's optional
+        prefix/suffix processing.
 
-    def _is_duplicate(self, message: str) -> bool:
-        """Return True if the most recent notification for this resource and
-        type has an identical message — i.e. nothing has changed."""
-        latest = (
-            models.Notification.objects.filter(
-                context__resource_instance_id=self.resource_instance_id,
-                notiftype_id=self.config.notiftype_id,
-            )
-            .order_by("-created")
-            .first()
-        )
-        return latest is not None and latest.message == message
+        Returns:
+            - the processed name string (possibly empty) → fire as normal.
+            - ``None`` only when ``require_prefix`` is set and the raw name
+              doesn't match → send_notification treats this as an explicit
+              skip signal.
+        """
+        raw = Resource.objects.get(pk=self.resource_instance_id).displayname()
+        if not raw:
+            return ""  # no display name yet — fire anyway with empty {name}
+        return self.config.resource_name.apply(raw)
 
     def _create_notification(self, message: str) -> models.Notification:
+        resource_link = self.request.build_absolute_uri(
+            f"/report/{self.resource_instance_id}"
+        )
         context: dict = {
             "resource_instance_id": self.resource_instance_id,
             "resource_id": self.name,
+            # Always present so the bell-dropdown "Open resource" button can
+            # render. Email branch overrides email_link from config when set.
+            "resource_link": resource_link,
+            # Stored under `link` so core's notification viewmodel forwards
+            # it to the bell template (no JS override needed). Our template
+            # override at views/components/notification.htm differentiates
+            # URL-style links (this) from core's exportid strings.
+            "link": resource_link,
         }
         if self.config.email:
+            email_link = (
+                self.request.build_absolute_uri(self.config.link_path)
+                if self.config.link_path
+                else resource_link
+            )
             context.update({
                 "greeting": message,
                 "salutation": "Hi",
                 "username": "",
                 "email": "",
-                "link": self.request.build_absolute_uri(self.config.link_path),
+                "email_link": email_link,
                 "button_text": self.config.button_text,
             })
         context.update(self.extra_context())
@@ -140,3 +155,63 @@ class NotificationStrategy:
             (opt.get("text", {}).get(lang) for opt in options if opt.get("id") == value_id),
             None,
         )
+
+    def _render_message(self, raw: str) -> str:
+        """Substitute ``{name}`` and ``{value:<node_alias>}`` tokens in a
+        rule message. Unknown aliases are left literal so the configurator
+        can see the typo rather than getting an empty string."""
+        def replace(match: re.Match) -> str:
+            token = match.group(1)
+            if token.lower() == "name":
+                return self.name or ""
+            alias = match.group(2)
+            value = self._resolve_node_value_by_alias(alias)
+            return value if value is not None else match.group(0)
+        return _MESSAGE_TOKEN_RE.sub(replace, raw)
+
+    def _resolve_node_value_by_alias(self, alias: str) -> str | None:
+        """Look up the saved tile value for a node by its alias and coerce
+        to a display string. Returns None if the alias doesn't resolve to
+        a node on this tile's graph."""
+        graph_id = self.tile.resourceinstance.graph_id
+        node = (
+            models.Node.objects.filter(alias=alias, graph_id=graph_id)
+            .only("nodeid", "datatype")
+            .first()
+        )
+        if not node:
+            return None
+        raw_value = (self.tile.data or {}).get(str(node.nodeid))
+        return self._coerce_value_to_string(raw_value, node)
+
+    def _coerce_value_to_string(self, value, node) -> str:
+        """Best-effort stringify of a tile value for use in a notification
+        message. Handles the common datatypes; falls back to str() for
+        anything unexpected."""
+        from django.conf import settings
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "Yes" if value else "No"
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, str):
+            # Could be a concept/domain-value UUID for some datatypes.
+            if node.datatype == "domain-value":
+                resolved = self.get_domain_value_string(value, str(node.nodeid))
+                return resolved or value
+            return value
+        if isinstance(value, list):
+            return ", ".join(
+                self._coerce_value_to_string(v, node) for v in value
+            )
+        if isinstance(value, dict):
+            # i18n string: {"en": {"value": "..."}, ...} or {"en": "...", ...}
+            lang = getattr(settings, "LANGUAGE_CODE", "en")
+            primary = value.get(lang) or value.get(lang.split("-")[0])
+            if isinstance(primary, dict):
+                return str(primary.get("value", ""))
+            if primary is not None:
+                return str(primary)
+            return ""
+        return str(value)
