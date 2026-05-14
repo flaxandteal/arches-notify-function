@@ -1,36 +1,42 @@
 <script setup lang="ts">
-import { onMounted, reactive, watch, ref } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 
 import Button from "primevue/button";
 import Message from "primevue/message";
 
 import NotificationRuleEntry from "./NotificationRuleEntry.vue";
-import { fetchGroups, fetchNodegroups, fetchNotificationTypes } from "./api.ts";
+import {
+    deleteNotificationType,
+    fetchEmailTemplates,
+    fetchGroups,
+    fetchNodegroups,
+} from "./api.ts";
 import {
     emptyRule,
+    type EmailTemplateOption,
     type GroupOption,
     type NodegroupOption,
     type NotificationPanelConfig,
     type NotificationRule,
-    type NotificationTypeOption,
 } from "./types.ts";
 
 const props = defineProps<{
     graphId: string;
     modelValue: NotificationPanelConfig;
+    // Pull-model bridge: KO shim hands us a function, Vue calls it once on
+    // Save Edits to flush the latest snapshot. No per-keystroke emits → no
+    // koMapping.fromJS churn while typing.
+    registerFlush?: (fn: () => NotificationPanelConfig) => void;
+    // Called once on the first user edit so the KO shim can flip `dirty` and
+    // make the function manager's Save Edits button appear (it's gated on
+    // dirty). Subsequent edits do nothing here — full state is pulled at save.
+    markDirty?: () => void;
 }>();
 
-const emit = defineEmits<{
-    (e: "update:modelValue", value: NotificationPanelConfig): void;
-}>();
-
-// Local reactive copy — Vue owns it. We propagate to the parent (KO shim)
-// debounced, so typing in a textarea doesn't trigger a koMapping.fromJS
-// rebuild on every keystroke.
+// Local reactive copy — Vue owns it. The KO shim pulls a snapshot via
+// registerFlush() when the function manager's Save Edits button is clicked.
 // Defensive: fold any incoming rule onto a fresh emptyRule() so missing
-// fields (from older saved configs) get sensible defaults. Otherwise an
-// undefined `email` would propagate into the Checkbox v-model and the
-// toggle silently emits undefined back.
+// fields (from older saved configs) get sensible defaults.
 const config = reactive<NotificationPanelConfig>({
     nodegroups: (props.modelValue?.nodegroups ?? []).map((r) => ({
         ...emptyRule(),
@@ -39,33 +45,34 @@ const config = reactive<NotificationPanelConfig>({
     })),
 });
 
-let emitTimer: ReturnType<typeof setTimeout> | null = null;
-watch(
+// Hand the KO shim a snapshot fn it can call on Save Edits.
+props.registerFlush?.(() => JSON.parse(JSON.stringify(config)));
+
+// Fire markDirty once on the first user edit, then stop watching. Cheap.
+const stopDirtyWatch = watch(
     config,
-    (val) => {
-        if (emitTimer) clearTimeout(emitTimer);
-        emitTimer = setTimeout(() => {
-            emit("update:modelValue", JSON.parse(JSON.stringify(val)));
-        }, 200);
+    () => {
+        props.markDirty?.();
+        stopDirtyWatch();
     },
-    { deep: true },
+    { deep: true, flush: "post" },
 );
 
 const nodegroups = ref<NodegroupOption[]>([]);
-const notificationTypes = ref<NotificationTypeOption[]>([]);
+const emailTemplates = ref<EmailTemplateOption[]>([]);
 const groups = ref<GroupOption[]>([]);
 const loadError = ref<string | null>(null);
 const loading = ref(true);
 
 onMounted(async () => {
     try {
-        const [ng, types, grps] = await Promise.all([
+        const [ng, templates, grps] = await Promise.all([
             fetchNodegroups(props.graphId),
-            fetchNotificationTypes(),
+            fetchEmailTemplates(),
             fetchGroups(),
         ]);
         nodegroups.value = ng;
-        notificationTypes.value = types;
+        emailTemplates.value = templates;
         groups.value = grps;
     } catch (e) {
         loadError.value =
@@ -81,7 +88,16 @@ function addRule() {
 }
 
 function removeRule(index: number) {
+    const removed = config.nodegroups[index];
     config.nodegroups.splice(index, 1);
+    props.markDirty?.();
+    if (removed?.notiftype_id) {
+        // Fire-and-forget: a stale type left behind on a network failure is
+        // harmless (just an orphan opt-out entry), so don't block the UI.
+        deleteNotificationType(removed.notiftype_id).catch((e) =>
+            console.warn("Failed to delete notification type:", e),
+        );
+    }
 }
 
 function updateRule(index: number, rule: NotificationRule) {
@@ -138,7 +154,7 @@ function updateRule(index: number, rule: NotificationRule) {
                     :rule="rule"
                     :index="i"
                     :nodegroups="nodegroups"
-                    :notification-types="notificationTypes"
+                    :email-templates="emailTemplates"
                     :groups="groups"
                     @update:rule="updateRule(i, $event)"
                     @remove="removeRule(i)"

@@ -1,6 +1,46 @@
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.http import JsonResponse
 from django.views import View
+
+from arches_notifications.notification_config import DEFAULT_NOTIFICATION_TYPE_ID
+
+
+DEFAULT_EMAIL_TEMPLATES = [
+    {"path": "email/general_notification.htm", "label": "General notification"},
+]
+
+
+class DeleteNotificationTypeView(View):
+    """Delete a NotificationType by id.
+
+    Called by the rule entry's trash icon so the per-rule type doesn't linger
+    in the user-preferences UI after the rule is removed. Refuses to delete
+    the package-shipped default type — it's shared across graphs/projects.
+    """
+
+    def delete(self, request, type_id):
+        from arches.app.models.models import NotificationType
+        if str(type_id) == str(DEFAULT_NOTIFICATION_TYPE_ID):
+            return JsonResponse(
+                {"deleted": False, "reason": "default type is protected"}, status=400
+            )
+        deleted, _ = NotificationType.objects.filter(typeid=type_id).delete()
+        return JsonResponse({"deleted": bool(deleted)})
+
+
+class EmailTemplatesView(View):
+    """Return the list of email templates available for notification rules.
+
+    Projects can override the list via the ARCHES_NOTIFICATIONS_EMAIL_TEMPLATES
+    Django setting. Each entry is ``{"path": "...", "label": "..."}``.
+    """
+
+    def get(self, request):
+        templates = getattr(
+            settings, "ARCHES_NOTIFICATIONS_EMAIL_TEMPLATES", DEFAULT_EMAIL_TEMPLATES
+        )
+        return JsonResponse({"templates": templates})
 
 
 class GroupsView(View):

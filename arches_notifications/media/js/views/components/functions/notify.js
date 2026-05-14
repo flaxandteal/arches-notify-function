@@ -40,10 +40,44 @@ export default ko.components.register("views/components/functions/notify", {
 
         const initial = ensureShape(koMapping.toJS(this.config));
 
-        const writeBack = (next) => {
-            const merged = ensureShape({ ...koMapping.toJS(this.config), ...next });
+        // Pull model: Vue keeps local state and hands us a snapshot fn at
+        // mount. We call it only when the function manager's Save Edits
+        // button is clicked (capture phase, before KO's click handler reads
+        // this.config). This avoids per-keystroke koMapping.fromJS, which
+        // was the source of typing lag in the message textarea.
+        let getSnapshot = null;
+        const registerFlush = (fn) => { getSnapshot = fn; };
+
+        // Called once on the user's first Vue-side edit. Reconcile a single
+        // time so KO's `dirty` computed flips true and the Save Edits button
+        // appears. Subsequent calls are no-ops; the real flush happens on
+        // save click below.
+        let dirtied = false;
+        const markDirty = () => {
+            if (dirtied || !getSnapshot) return;
+            dirtied = true;
+            const merged = ensureShape({
+                ...koMapping.toJS(this.config),
+                ...getSnapshot(),
+            });
             koMapping.fromJS(merged, this.config);
         };
+
+        const flush = () => {
+            if (!getSnapshot) return;
+            const merged = ensureShape({
+                ...koMapping.toJS(this.config),
+                ...getSnapshot(),
+            });
+            koMapping.fromJS(merged, this.config);
+        };
+
+        const onCaptureClick = (e) => {
+            const btn = e.target.closest('button[data-bind*="click: save"]');
+            if (btn) flush();
+        };
+        document.addEventListener("click", onCaptureClick, true);
+
         const mount = () => {
             const target = document.getElementById(this.mountId);
             if (!target) {
@@ -53,7 +87,8 @@ export default ko.components.register("views/components/functions/notify", {
             createVueApplication(NotificationConfigPanel, undefined, {
                 graphId: this.graphid,
                 modelValue: initial,
-                "onUpdate:modelValue": writeBack,
+                registerFlush,
+                markDirty,
             }).then((app) => {
                 app.mount("#" + this.mountId);
             });
