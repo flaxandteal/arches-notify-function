@@ -79,6 +79,32 @@ class NotifyFunction(BaseFunction):
     _alias_uuid_cache: dict[tuple[str, str], str] = {}
     _node_uuid_cache: dict[tuple[str, str], str] = {}
 
+    def after_function_save(self, function_x_graph, request) -> None:
+        """Fired by the function manager after the FunctionXGraph row is saved.
+        Upserts a NotificationType per rule so each rule shows up as its own
+        opt-out entry in Arches' user-notification preferences UI, and the
+        per-rule emailtemplate is honoured at send time. Deletion of types
+        for removed rules is handled by the Vue panel calling the
+        delete-notification-type endpoint when the trash icon is clicked."""
+        from arches.app.models.models import NotificationType
+        config = function_x_graph.config or {}
+        graph_name = getattr(function_x_graph.graph, "name", "") or ""
+        for rule in config.get("nodegroups", []):
+            type_id = rule.get("notiftype_id")
+            if not type_id:
+                continue
+            nodegroup_alias = rule.get("nodegroup_alias") or "rule"
+            default_name = f"{graph_name} — {nodegroup_alias}".strip(" —")
+            NotificationType.objects.update_or_create(
+                typeid=type_id,
+                defaults={
+                    "name": rule.get("notification_name") or default_name,
+                    "emailtemplate": rule.get("emailtemplate") or "email/general_notification.htm",
+                    "emailnotify": bool(rule.get("email")),
+                    "webnotify": True,
+                },
+            )
+
     def save(self, tile, request: HttpRequest, context: dict | None = None) -> None:
         """Pre-save hook. Stash the prior tile data on the tile instance only
         if at least one matching rule wants change detection (i.e. has
