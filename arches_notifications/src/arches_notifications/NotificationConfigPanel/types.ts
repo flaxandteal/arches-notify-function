@@ -4,17 +4,21 @@ export interface ResourceNameConfig {
     strip_suffix: string | null;
 }
 
-// Matches the well-known UUID set by migration 0001_notification_type and
-// notification_config.DEFAULT_NOTIFICATION_TYPE_ID. Used as the dropdown's
-// default selection; users can change it per rule.
-export const DEFAULT_NOTIFICATION_TYPE_ID =
-    "a85b3f1c-7d4e-4d5a-9b5e-2a3b4c5d6e7f";
+export const DEFAULT_EMAIL_TEMPLATE = "email/general_notification.htm";
 
 export interface NotificationRule {
     nodegroup_alias: string;
     // Optional: when set, fire only if THIS node's value changed.
     node_alias: string | null;
+    // UUID auto-generated when the rule is created. The function's
+    // after_function_save hook upserts a NotificationType keyed by this id,
+    // so each rule maps 1:1 to an opt-out entry in the user prefs UI.
     notiftype_id: string;
+    // Becomes NotificationType.name — what the user sees in their email
+    // preferences. Empty => derived from graph + nodegroup at save time.
+    notification_name: string;
+    // Django template path used to render the email body.
+    emailtemplate: string;
     groups_to_notify: string[];
     message: string;
     email: boolean;
@@ -41,11 +45,9 @@ export interface NodegroupOption {
     nodes: NodeOption[];
 }
 
-export interface NotificationTypeOption {
-    typeid: string;
-    name: string;
-    emailnotify: boolean;
-    webnotify: boolean;
+export interface EmailTemplateOption {
+    path: string;
+    label: string;
 }
 
 export interface GroupOption {
@@ -57,12 +59,16 @@ export function emptyRule(): NotificationRule {
     return {
         nodegroup_alias: "",
         node_alias: null,
-        notiftype_id: DEFAULT_NOTIFICATION_TYPE_ID,
+        notiftype_id: crypto.randomUUID(),
+        notification_name: "",
+        emailtemplate: DEFAULT_EMAIL_TEMPLATE,
         groups_to_notify: [],
         message: "",
         email: false,
-        button_text: "Open Arches",
-        link_path: "/index.htm",
+        button_text: "View resource",
+        // Empty => backend links to the resource report page. Override with
+        // a fixed path if every email should land on the same destination.
+        link_path: "",
         resource_name: {
             require_prefix: null,
             strip_prefix: null,

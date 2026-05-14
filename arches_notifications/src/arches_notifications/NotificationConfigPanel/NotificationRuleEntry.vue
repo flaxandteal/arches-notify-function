@@ -10,18 +10,18 @@ import Textarea from "primevue/textarea";
 import Checkbox from "primevue/checkbox";
 
 import type {
+    EmailTemplateOption,
     GroupOption,
     NodegroupOption,
     NodeOption,
     NotificationRule,
-    NotificationTypeOption,
 } from "./types";
 
 const props = defineProps<{
     rule: NotificationRule;
     index: number;
     nodegroups: NodegroupOption[];
-    notificationTypes: NotificationTypeOption[];
+    emailTemplates: EmailTemplateOption[];
     groups: GroupOption[];
 }>();
 
@@ -56,11 +56,11 @@ const selectedNode = computed({
         update("node_alias", val?.alias ?? null),
 });
 
-const selectedType = computed({
+const selectedEmailTemplate = computed({
     get: () =>
-        props.notificationTypes.find((t) => t.typeid === props.rule.notiftype_id) ?? null,
-    set: (val: NotificationTypeOption | null) =>
-        update("notiftype_id", val?.typeid ?? ""),
+        props.emailTemplates.find((t) => t.path === props.rule.emailtemplate) ?? null,
+    set: (val: EmailTemplateOption | null) =>
+        update("emailtemplate", val?.path ?? ""),
 });
 
 const selectedGroups = computed({
@@ -155,13 +155,12 @@ const ruleLabel = computed(() => {
             </div>
 
             <div class="field">
-                <label>Notification type</label>
-                <Select
-                    v-model="selectedType"
-                    :options="notificationTypes"
-                    option-label="name"
-                    placeholder="Select type…"
+                <label>Notification name (shown in users' email preferences)</label>
+                <InputText
+                    :model-value="rule.notification_name"
                     class="w-full"
+                    placeholder="Leave blank to auto-name from graph + nodegroup"
+                    @update:model-value="update('notification_name', $event)"
                 />
             </div>
 
@@ -184,7 +183,7 @@ const ruleLabel = computed(() => {
                     :model-value="rule.message"
                     rows="2"
                     class="w-full"
-                    placeholder="Use {name} for the resource display name"
+                    placeholder="Use {name} for the resource name; {value:node_alias} for a node value"
                     @update:model-value="update('message', $event)"
                 />
             </div>
@@ -199,6 +198,16 @@ const ruleLabel = computed(() => {
 
             <template v-if="rule.email">
                 <div class="field email-field">
+                    <label>Email template</label>
+                    <Select
+                        v-model="selectedEmailTemplate"
+                        :options="emailTemplates"
+                        option-label="label"
+                        placeholder="Select template…"
+                        class="w-full"
+                    />
+                </div>
+                <div class="field email-field">
                     <label>Button text</label>
                     <InputText
                         :model-value="rule.button_text"
@@ -211,7 +220,7 @@ const ruleLabel = computed(() => {
                     <InputText
                         :model-value="rule.link_path"
                         class="w-full"
-                        placeholder="/index.htm"
+                        placeholder="Leave blank to link to the resource page"
                         @update:model-value="update('link_path', $event)"
                     />
                 </div>
