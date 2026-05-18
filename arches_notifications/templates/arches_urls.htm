@@ -1,0 +1,11 @@
+{% extends "arches_urls.htm" %}
+
+{% block arches_urls %}
+{{ block.super }}
+<div class="arches-urls"
+    notification_groups="{% url 'notification_groups' %}"
+    notification_nodegroups='(graphId) => { return "{% url "notification_nodegroups" "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" %}".replace("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", graphId)}'
+    notification_email_templates="{% url 'notification_email_templates' %}"
+    notification_type_delete='(typeId) => { return "{% url "notification_type_delete" "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" %}".replace("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", typeId)}'
+></div>
+{% endblock arches_urls %}
