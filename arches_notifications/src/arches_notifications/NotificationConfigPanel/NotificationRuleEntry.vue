@@ -73,7 +73,6 @@ const selectedGroups = computed({
 const emailEnabled = computed({
     get: () => !!props.rule.email,
     set: (val: boolean) => {
-        console.log("toggle", val);
         update("email", !!val);
     },
 });
