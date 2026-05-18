@@ -135,6 +135,15 @@ class NotificationStrategy:
         models.UserXNotification(notif=notif, recipient=user).save()
 
     def _clone_notification_for_user(self, user: User) -> models.Notification:
+        """Per-user copy of the notification (the email branch needs the
+        recipient's username/email baked into context).
+
+        TODO: called once per recipient from the loop in notify_user, so a
+        rule targeting a large group — or several groups, transitively —
+        costs N Notification.save() round-trips plus N UserXNotification
+        saves. Refactor send_notification to build all clones and join
+        rows and bulk_create() them (two queries instead of 2N).
+        """
         context = {**self.notification.context, "username": user.username, "email": user.email}
         notif = models.Notification(
             message=self.notification.message,
