@@ -75,9 +75,47 @@ class NotifyFunction(BaseFunction):
     # is swapped in. Falls back to NotificationStrategy for unmapped aliases.
     strategy_overrides: dict[str, type[NotificationStrategy]] = {}
 
-    # Per-class cache of (alias, graph_slug) → UUID string, populated lazily.
+    # Per-class caches of (alias, graph_slug) → UUID, populated lazily.
+    # Staleness handled via _graph_publication (invalidate on re-publish);
+    # _CACHE_MAX_ENTRIES is a backstop against pathological growth only.
+    _CACHE_MAX_ENTRIES = 500
     _alias_uuid_cache: dict[tuple[str, str], str] = {}
     _node_uuid_cache: dict[tuple[str, str], str] = {}
+    # graph_slug → last-seen GraphModel.publication_id (as str), per class.
+    _graph_publication: dict[str, str] = {}
+
+    @classmethod
+    def _check_publication(cls, graph_slug: str) -> None:
+        """Drop a graph's cached entries if its publication id changed
+        (i.e. it was re-published). One indexed lookup per call, far
+        lighter than the Node join it guards."""
+        from arches.app.models.models import GraphModel
+        pub = (
+            GraphModel.objects.filter(slug=graph_slug, source_identifier__isnull=True)
+            .values_list("publication_id", flat=True)
+            .first()
+        )
+        pub = str(pub) if pub else ""
+        if cls._graph_publication.get(graph_slug) != pub:
+            cls._invalidate_graph_cache(graph_slug)
+            cls._graph_publication[graph_slug] = pub
+
+    @classmethod
+    def _cache_put(cls, cache: dict[tuple[str, str], str], key: tuple[str, str], value: str) -> str:
+        """Insert into a per-class cache, clearing it first if it is at
+        _CACHE_MAX_ENTRIES. Full clear over LRU: entries are cheap to
+        recompute and this only fires under pathological growth."""
+        if len(cache) >= cls._CACHE_MAX_ENTRIES:
+            cache.clear()
+        cache[key] = value
+        return value
+
+    @classmethod
+    def _invalidate_graph_cache(cls, graph_slug: str) -> None:
+        """Drop all cached alias→UUID entries for one graph."""
+        for cache in (cls._alias_uuid_cache, cls._node_uuid_cache):
+            for key in [k for k in cache if k[1] == graph_slug]:
+                del cache[key]
 
     def after_function_save(self, function_x_graph, request) -> None:
         """Fired by the function manager after the FunctionXGraph row is saved.
@@ -144,21 +182,27 @@ class NotifyFunction(BaseFunction):
     def _resolve_alias(self, alias: str, graph_slug: str) -> str:
         """Return the nodegroup UUID string for a nodegroup alias, cached per class."""
         cls = type(self)
+        cls._check_publication(graph_slug)
         cache_key = (alias, graph_slug)
         if cache_key not in cls._alias_uuid_cache:
             from arches.app.models.models import Node
             node = Node.objects.filter(alias=alias, graph__slug=graph_slug).first()
-            cls._alias_uuid_cache[cache_key] = str(node.nodegroup_id) if node else alias
+            return cls._cache_put(
+                cls._alias_uuid_cache, cache_key, str(node.nodegroup_id) if node else alias
+            )
         return cls._alias_uuid_cache[cache_key]
 
     def _resolve_node_alias(self, alias: str, graph_slug: str) -> str:
         """Return the node UUID string for a node alias, cached per class."""
         cls = type(self)
+        cls._check_publication(graph_slug)
         cache_key = (alias, graph_slug)
         if cache_key not in cls._node_uuid_cache:
             from arches.app.models.models import Node
             node = Node.objects.filter(alias=alias, graph__slug=graph_slug).first()
-            cls._node_uuid_cache[cache_key] = str(node.nodeid) if node else alias
+            return cls._cache_put(
+                cls._node_uuid_cache, cache_key, str(node.nodeid) if node else alias
+            )
         return cls._node_uuid_cache[cache_key]
 
     def _node_changed(self, tile, node_alias: str, graph_slug: str) -> bool:
