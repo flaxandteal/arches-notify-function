@@ -1,9 +1,16 @@
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
 from django.views import View
 
+from arches.app.utils.decorators import group_required
+
 from arches_notifications.notification_config import DEFAULT_NOTIFICATION_TYPE_ID
+
+graph_editor_required = method_decorator(
+    group_required("Graph Editor"), name="dispatch"
+)
 
 
 DEFAULT_EMAIL_TEMPLATES = [
@@ -11,6 +18,7 @@ DEFAULT_EMAIL_TEMPLATES = [
 ]
 
 
+@graph_editor_required
 class DeleteNotificationTypeView(View):
     """Delete a NotificationType by id.
 
@@ -29,6 +37,7 @@ class DeleteNotificationTypeView(View):
         return JsonResponse({"deleted": bool(deleted)})
 
 
+@graph_editor_required
 class EmailTemplatesView(View):
     """Return the list of email templates available for notification rules.
 
@@ -43,6 +52,7 @@ class EmailTemplatesView(View):
         return JsonResponse({"templates": templates})
 
 
+@graph_editor_required
 class GroupsView(View):
     """Return all Django auth groups for the function config UI.
 
@@ -54,6 +64,7 @@ class GroupsView(View):
         return JsonResponse({"groups": groups})
 
 
+@graph_editor_required
 class GraphNodegroupsView(View):
     """Return nodegroups (with aliases) for a graph slug or UUID.
 
