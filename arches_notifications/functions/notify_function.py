@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from arches.app.functions.base import BaseFunction
@@ -10,6 +11,8 @@ from arches_notifications.notification_base_strategy import NotificationStrategy
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
     from django.http import HttpRequest
+
+logger = logging.getLogger(__name__)
 
 
 # Read by `python manage.py fn register --source <path>/notify_function.py`.
@@ -167,7 +170,14 @@ class NotifyFunction(BaseFunction):
             strategy_class = type(self).strategy_overrides.get(
                 config.nodegroup_alias, NotificationStrategy
             )
-            strategy_class(tile, request, user, config).send_notification()
+            try:
+                strategy_class(tile, request, user, config).send_notification()
+            except Exception:
+                logger.exception(
+                    "Notification rule failed for nodegroup_alias=%s on tile %s",
+                    config.nodegroup_alias,
+                    getattr(tile, "pk", None),
+                )
 
     def _configs_for_tile(self, nodegroup_id: str, graph_slug: str) -> list[NotificationConfig]:
         entries = (self.config or {}).get("nodegroups", [])
