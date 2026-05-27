@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from django.conf import settings
+
 from arches.app.models import models
 from arches.app.models.resource import Resource
 
@@ -80,10 +82,22 @@ class NotificationStrategy:
             return ""  # no display name yet — fire anyway with empty {name}
         return self.config.resource_name.apply(raw)
 
+    def _absolute_uri(self, path: str) -> str:
+        """Absolute URL for ``path``.
+
+        Prefers the HTTP request when present (e.g. interactive saves), but
+        notifications can be raised from contexts with no request — lifecycle
+        handlers, Celery tasks, management commands — where we fall back to
+        ``settings.PUBLIC_SERVER_ADDRESS``. Last-resort returns the relative
+        path: still usable for the bell dropdown, just not for email.
+        """
+        if self.request is not None:
+            return self.request.build_absolute_uri(path)
+        base = (getattr(settings, "PUBLIC_SERVER_ADDRESS", "") or "").rstrip("/")
+        return f"{base}{path}" if base else path
+
     def _create_notification(self, message: str) -> models.Notification:
-        resource_link = self.request.build_absolute_uri(
-            f"/report/{self.resource_instance_id}"
-        )
+        resource_link = self._absolute_uri(f"/report/{self.resource_instance_id}")
         context: dict = {
             "resource_instance_id": self.resource_instance_id,
             "resource_id": self.name,
@@ -98,7 +112,7 @@ class NotificationStrategy:
         }
         if self.config.email:
             email_link = (
-                self.request.build_absolute_uri(self.config.link_path)
+                self._absolute_uri(self.config.link_path)
                 if self.config.link_path
                 else resource_link
             )
