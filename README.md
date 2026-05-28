@@ -113,6 +113,34 @@ notification's `context["link"]`, and the app ships a template override at
 - Falls back to core's "Download Zip" button when `link` is an export id
   string — so Arches' existing export/download notifications keep working.
 
+The bell link is stored as a **relative path** (`/report/<id>`) so the
+browser resolves it against the current origin — no environment-specific
+config needed for in-app links.
+
+### `PUBLIC_SERVER_ADDRESS` (required for email)
+
+Email links must be absolute because they're rendered outside the app. The
+strategy builds them via `request.build_absolute_uri` when an HTTP request
+is available, and falls back to `settings.PUBLIC_SERVER_ADDRESS` for
+request-less contexts (Celery tasks, lifecycle hooks, management commands).
+
+Set `PUBLIC_SERVER_ADDRESS` to the **public** URL of the site in every
+environment that sends email:
+
+```bash
+# .env / docker-compose
+PUBLIC_SERVER_ADDRESS=https://dev.example.com/
+```
+
+The Quartz docker settings default this to `http://arches:8000/` (the
+internal container hostname) if unset — fine for local dev where nothing
+leaves the container, broken for any environment that actually delivers
+mail. If recipients see links pointing at `arches:8000`, this is why.
+
+If you're behind a reverse proxy and want `request.build_absolute_uri` to
+produce the public URL on its own, also ensure the proxy forwards the
+original `Host` header and Django has `USE_X_FORWARDED_HOST = True`.
+
 ### Testing notifications
 
 **Web notifications** show up immediately for any logged-in member of the
@@ -295,7 +323,7 @@ The context passed to email templates includes:
 | `username`, `email` | Recipient's User fields. |
 | `email_link` | The button href. Configured per-rule via `link_path`; falls back to the resource report URL if empty. |
 | `button_text` | Per-rule label. |
-| `resource_link` | Absolute URL of the resource's report page. Always set. |
+| `resource_link` | Relative path to the resource's report page (`/report/<id>`). Always set. |
 | `resource_instance_id` | UUID string. |
 | `resource_id` | The processed display name (after prefix/suffix handling). |
 
