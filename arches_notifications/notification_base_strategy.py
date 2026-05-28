@@ -97,25 +97,21 @@ class NotificationStrategy:
         return f"{base}{path}" if base else path
 
     def _create_notification(self, message: str) -> models.Notification:
-        resource_link = self._absolute_uri(f"/report/{self.resource_instance_id}")
+        resource_path = f"/report/{self.resource_instance_id}"
         context: dict = {
             "resource_instance_id": self.resource_instance_id,
             "resource_id": self.name,
             # Always present so the bell-dropdown "Open resource" button can
             # render. Email branch overrides email_link from config when set.
-            "resource_link": resource_link,
+            "resource_link": resource_path,
             # Stored under `link` so core's notification viewmodel forwards
             # it to the bell template (no JS override needed). Our template
             # override at views/components/notification.htm differentiates
             # URL-style links (this) from core's exportid strings.
-            "link": resource_link,
+            "link": resource_path,
         }
         if self.config.email:
-            email_link = (
-                self._absolute_uri(self.config.link_path)
-                if self.config.link_path
-                else resource_link
-            )
+            email_link = self._absolute_uri(self.config.link_path or resource_path)
             context.update({
                 "greeting": message,
                 "salutation": "Hi",
