@@ -5,6 +5,7 @@ from .views import (
     EmailTemplatesView,
     GraphNodegroupsView,
     GroupsView,
+    UsersView,
 )
 
 urlpatterns = [
@@ -12,6 +13,11 @@ urlpatterns = [
         "api/notifications/groups",
         GroupsView.as_view(),
         name="notification_groups",
+    ),
+    path(
+        "api/notifications/users",
+        UsersView.as_view(),
+        name="notification_users",
     ),
     path(
         "api/notifications/nodegroups/<str:graph_id>",

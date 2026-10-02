@@ -1,11 +1,24 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import TYPE_CHECKING
+
+from django.db import transaction
 
 from arches.app.functions.base import BaseFunction
 
-from arches_notifications.notification_config import NotificationConfig
+from arches_notifications.notification_config import (
+    DEFAULT_EMAIL_TEMPLATE,
+    FIRE_ON_ANY,
+    FIRE_ON_COPIED,
+    FIRE_ON_CREATED,
+    FIRE_ON_UPDATED,
+    SAVED_BY_ANYONE,
+    SAVED_BY_SYSTEM,
+    SAVED_BY_USER,
+    NotificationConfig,
+)
 from arches_notifications.notification_base_strategy import NotificationStrategy
 
 if TYPE_CHECKING:
@@ -13,6 +26,9 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
+
+# An event no rule's fire_on names, so only "any" rules match it.
+COPIED_DURING_CREATE = "copied_during_create"
 
 
 # Read by `python manage.py fn register --source <path>/notify_function.py`.
@@ -140,7 +156,7 @@ class NotifyFunction(BaseFunction):
                 typeid=type_id,
                 defaults={
                     "name": rule.get("notification_name") or default_name,
-                    "emailtemplate": rule.get("emailtemplate") or "email/general_notification.htm",
+                    "emailtemplate": rule.get("emailtemplate") or DEFAULT_EMAIL_TEMPLATE,
                     "emailnotify": bool(rule.get("email")),
                     "webnotify": True,
                 },
@@ -164,20 +180,61 @@ class NotifyFunction(BaseFunction):
         graph_slug = tile.resourceinstance.graph.slug
         user = self._get_user(request)
 
-        for config in self._configs_for_tile(nodegroup_id, graph_slug):
+        configs = self._configs_for_tile(nodegroup_id, graph_slug)
+        if not configs:
+            return
+        from arches_notifications.transaction_events import transaction_state
+        state = transaction_state()
+        resource_id = str(tile.resourceinstance_id)
+        event = self._resource_event(resource_id, state)
+        saved_by = SAVED_BY_SYSTEM if user is None else SAVED_BY_USER
+
+        for config in configs:
             if config.node_alias and not self._node_changed(tile, config.node_alias, graph_slug):
                 continue
+            if config.fire_on not in (FIRE_ON_ANY, event):
+                continue
+            if config.saved_by not in (SAVED_BY_ANYONE, saved_by):
+                continue
+            # One send per rule per resource per transaction (a sync saves the
+            # same nodegroup several times).
+            key = (str(config.notiftype_id), resource_id)
+            if key in state["queued"]:
+                continue
+            state["queued"].add(key)
+            # Send once the whole save has committed: later tiles and the
+            # descriptors ({name}) don't exist yet at this point.
+            transaction.on_commit(partial(self._send, tile, request, user, config))
+
+    @staticmethod
+    def _resource_event(resource_id: str, state: dict) -> str:
+        """created / copied if the resource was inserted in this transaction,
+        else updated. Core logs edittype "create" for a new resource before
+        saving its tiles; Resource.copy() saves are logged "copy"."""
+        if resource_id not in state["created"]:
+            return FIRE_ON_UPDATED
+        from arches.app.models.models import EditLog
+        if EditLog.objects.filter(resourceinstanceid=resource_id, edittype="create").exists():
+            return FIRE_ON_CREATED
+        # A copy taken while creating a new resource (e.g. a first-version
+        # snapshot) belongs to that creation, so no "copied" rule fires for it.
+        others = state["created"] - {resource_id}
+        if EditLog.objects.filter(resourceinstanceid__in=others, edittype="create").exists():
+            return COPIED_DURING_CREATE
+        return FIRE_ON_COPIED
+
+    def _send(self, tile, request: HttpRequest, user: User | None, config: NotificationConfig) -> None:
+        try:
             strategy_class = type(self).strategy_overrides.get(
                 config.nodegroup_alias, NotificationStrategy
             )
-            try:
-                strategy_class(tile, request, user, config).send_notification()
-            except Exception:
-                logger.exception(
-                    "Notification rule failed for nodegroup_alias=%s on tile %s",
-                    config.nodegroup_alias,
-                    getattr(tile, "pk", None),
-                )
+            strategy_class(tile, request, user, config).send_notification()
+        except Exception:
+            logger.exception(
+                "Notification rule failed for nodegroup_alias=%s on tile %s",
+                config.nodegroup_alias,
+                getattr(tile, "pk", None),
+            )
 
     def _configs_for_tile(self, nodegroup_id: str, graph_slug: str) -> list[NotificationConfig]:
         entries = (self.config or {}).get("nodegroups", [])

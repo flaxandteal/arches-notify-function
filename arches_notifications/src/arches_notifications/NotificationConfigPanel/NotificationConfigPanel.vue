@@ -10,11 +10,13 @@ import {
     fetchEmailTemplates,
     fetchGroups,
     fetchNodegroups,
+    fetchUsers,
 } from "./api.ts";
 import {
     emptyRule,
     type EmailTemplateOption,
     type GroupOption,
+    type UserOption,
     type NodegroupOption,
     type NotificationPanelConfig,
     type NotificationRule,
@@ -61,19 +63,22 @@ const stopDirtyWatch = watch(
 const nodegroups = ref<NodegroupOption[]>([]);
 const emailTemplates = ref<EmailTemplateOption[]>([]);
 const groups = ref<GroupOption[]>([]);
+const users = ref<UserOption[]>([]);
 const loadError = ref<string | null>(null);
 const loading = ref(true);
 
 onMounted(async () => {
     try {
-        const [ng, templates, grps] = await Promise.all([
+        const [ng, templates, grps, usrs] = await Promise.all([
             fetchNodegroups(props.graphId),
             fetchEmailTemplates(),
             fetchGroups(),
+            fetchUsers(),
         ]);
         nodegroups.value = ng;
         emailTemplates.value = templates;
         groups.value = grps;
+        users.value = usrs;
     } catch (e) {
         loadError.value =
             "Failed to load configuration options. Check the console for details.";
@@ -156,6 +161,7 @@ function updateRule(index: number, rule: NotificationRule) {
                     :nodegroups="nodegroups"
                     :email-templates="emailTemplates"
                     :groups="groups"
+                    :users="users"
                     @update:rule="updateRule(i, $event)"
                     @remove="removeRule(i)"
                 />

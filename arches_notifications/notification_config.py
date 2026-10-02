@@ -5,7 +5,27 @@ from uuid import UUID
 # rule does not specify its own type. Override by editing the rule's JSON
 # config directly if you want a different NotificationType per rule.
 DEFAULT_NOTIFICATION_TYPE_ID = UUID("a85b3f1c-7d4e-4d5a-9b5e-2a3b4c5d6e7f")
-DEFAULT_EMAIL_TEMPLATE = "email/general_notification.htm"
+# Namespaced: other apps (e.g. arches_search) ship their own
+# email/general_notification.htm, which can shadow a same-named template here.
+DEFAULT_EMAIL_TEMPLATE = "email/arches_notifications/notification.htm"
+
+# Which resource event a rule fires on.
+FIRE_ON_ANY = "any"
+FIRE_ON_CREATED = "created"
+FIRE_ON_UPDATED = "updated"
+FIRE_ON_COPIED = "copied"
+
+# Whose save a rule fires on. "system" = no signed-in user (integrations,
+# imports, management commands).
+SAVED_BY_ANYONE = "anyone"
+SAVED_BY_USER = "user"
+SAVED_BY_SYSTEM = "system"
+
+# Where a rule's email goes. "Members" = groups_to_notify members plus
+# users_to_notify; they always get the bell either way.
+EMAIL_TO_MEMBERS = "members"
+EMAIL_TO_MEMBERS_AND_EXTRA = "members_and_extra"
+EMAIL_TO_EXTRA_ONLY = "extra_only"
 
 
 @dataclass
@@ -39,7 +59,10 @@ class NotificationConfig:
     message: str
     notiftype_id: UUID = DEFAULT_NOTIFICATION_TYPE_ID
     groups_to_notify: list[str] = field(default_factory=list)
+    users_to_notify: list[int] = field(default_factory=list)
     email: bool = False
+    email_recipients: str = EMAIL_TO_MEMBERS
+    email_addresses: list[str] = field(default_factory=list)
     button_text: str = "View resource"
     # Empty means "link to the resource report page" — the strategy fills it
     # in from resource_instance_id at send time. Override with a fixed path
@@ -49,12 +72,22 @@ class NotificationConfig:
     # Optional: only fire when this node within the nodegroup has changed.
     # Empty / None means "fire on any tile save in the nodegroup".
     node_alias: str | None = None
+    fire_on: str = FIRE_ON_ANY
+    saved_by: str = SAVED_BY_ANYONE
     # Used as NotificationType.name (the label users see in their email
     # preferences). When empty, after_function_save derives one from the
     # nodegroup alias.
     notification_name: str | None = None
     # Used as NotificationType.emailtemplate (Django template path).
     emailtemplate: str = DEFAULT_EMAIL_TEMPLATE
+
+    @property
+    def emails_members(self) -> bool:
+        return self.email and self.email_recipients != EMAIL_TO_EXTRA_ONLY
+
+    @property
+    def emails_extra(self) -> bool:
+        return self.email and self.email_recipients != EMAIL_TO_MEMBERS
 
     @classmethod
     def from_dict(cls, data: dict) -> "NotificationConfig":
@@ -64,11 +97,16 @@ class NotificationConfig:
             message=data["message"],
             notiftype_id=UUID(raw_type_id) if raw_type_id else DEFAULT_NOTIFICATION_TYPE_ID,
             groups_to_notify=data.get("groups_to_notify", []),
+            users_to_notify=data.get("users_to_notify") or [],
             email=data.get("email", False),
+            email_recipients=data.get("email_recipients") or EMAIL_TO_MEMBERS,
+            email_addresses=data.get("email_addresses") or [],
             button_text=data.get("button_text") or "View resource",
             link_path=data.get("link_path") or "",
             resource_name=ResourceNameConfig.from_dict(data.get("resource_name") or {}),
             node_alias=data.get("node_alias") or None,
+            fire_on=data.get("fire_on") or FIRE_ON_ANY,
+            saved_by=data.get("saved_by") or SAVED_BY_ANYONE,
             notification_name=data.get("notification_name") or None,
             emailtemplate=data.get("emailtemplate") or DEFAULT_EMAIL_TEMPLATE,
         )

@@ -136,3 +136,21 @@ def test_from_dict_missing_required_keys_raises():
         NotificationConfig.from_dict({"message": "m"})
     with pytest.raises(KeyError):
         NotificationConfig.from_dict({"nodegroup_alias": "ng"})
+
+
+def test_from_dict_email_addresses_default_and_value():
+    base = {"nodegroup_alias": "a", "message": "m"}
+    old_rule = NotificationConfig.from_dict(base)
+    assert old_rule.email_addresses == []
+    assert old_rule.email_recipients == "members"
+    cfg = NotificationConfig.from_dict(
+        {**base, "email_addresses": ["x@y.org"], "email_recipients": "extra_only"}
+    )
+    assert cfg.email_addresses == ["x@y.org"]
+    assert cfg.email_recipients == "extra_only"
+
+
+def test_from_dict_users_to_notify_default_and_value():
+    base = {"nodegroup_alias": "a", "message": "m"}
+    assert NotificationConfig.from_dict(base).users_to_notify == []
+    assert NotificationConfig.from_dict({**base, "users_to_notify": [3, 7]}).users_to_notify == [3, 7]

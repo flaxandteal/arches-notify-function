@@ -8,13 +8,18 @@ import Panel from "primevue/panel";
 import Select from "primevue/select";
 import Textarea from "primevue/textarea";
 import Checkbox from "primevue/checkbox";
+import RadioButton from "primevue/radiobutton";
 
 import type {
+    EmailRecipients,
+    FireOn,
+    SavedBy,
     EmailTemplateOption,
     GroupOption,
     NodegroupOption,
     NodeOption,
     NotificationRule,
+    UserOption,
 } from "./types";
 
 const props = defineProps<{
@@ -23,6 +28,7 @@ const props = defineProps<{
     nodegroups: NodegroupOption[];
     emailTemplates: EmailTemplateOption[];
     groups: GroupOption[];
+    users: UserOption[];
 }>();
 
 const emit = defineEmits<{
@@ -68,6 +74,63 @@ const selectedGroups = computed({
         props.groups.filter((g) => props.rule.groups_to_notify.includes(g.name)),
     set: (val: GroupOption[]) =>
         update("groups_to_notify", val.map((g) => g.name)),
+});
+
+const emailRecipientOptions: { value: EmailRecipients; label: string }[] = [
+    { value: "members", label: "Selected groups and users" },
+    { value: "members_and_extra", label: "Selected groups and users, plus extra addresses" },
+    { value: "extra_only", label: "Only extra addresses" },
+];
+
+const emailRecipients = computed({
+    get: () => props.rule.email_recipients ?? "members",
+    set: (val: EmailRecipients) => update("email_recipients", val),
+});
+
+const emailAddressesText = computed(() =>
+    (props.rule.email_addresses ?? []).join(", "),
+);
+
+function updateEmailAddresses(event: Event) {
+    const text = (event.target as HTMLInputElement).value;
+    update(
+        "email_addresses",
+        text.split(",").map((a) => a.trim()).filter((a) => a !== ""),
+    );
+}
+
+const selectedUsers = computed({
+    get: () =>
+        props.users.filter((u) => (props.rule.users_to_notify ?? []).includes(u.id)),
+    set: (val: UserOption[]) =>
+        update("users_to_notify", val.map((u) => u.id)),
+});
+
+function userLabel(user: UserOption): string {
+    return user.email ? `${user.username} (${user.email})` : user.username;
+}
+
+const fireOnOptions: { value: FireOn; label: string }[] = [
+    { value: "any", label: "Any save" },
+    { value: "created", label: "Resource created" },
+    { value: "updated", label: "Resource updated" },
+    { value: "copied", label: "Resource copied" },
+];
+
+const savedByOptions: { value: SavedBy; label: string }[] = [
+    { value: "anyone", label: "Anyone" },
+    { value: "user", label: "A signed-in user" },
+    { value: "system", label: "The system (integrations, imports)" },
+];
+
+const fireOn = computed({
+    get: () => props.rule.fire_on ?? "any",
+    set: (val: FireOn) => update("fire_on", val),
+});
+
+const savedBy = computed({
+    get: () => props.rule.saved_by ?? "anyone",
+    set: (val: SavedBy) => update("saved_by", val),
 });
 
 const emailEnabled = computed({
@@ -153,6 +216,29 @@ const ruleLabel = computed(() => {
                 />
             </div>
 
+            <div class="field-row">
+                <div class="field">
+                    <label>Fire on</label>
+                    <Select
+                        v-model="fireOn"
+                        :options="fireOnOptions"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                    />
+                </div>
+                <div class="field">
+                    <label>Saved by</label>
+                    <Select
+                        v-model="savedBy"
+                        :options="savedByOptions"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                    />
+                </div>
+            </div>
+
             <div class="field">
                 <label>Notification name (shown in users' email preferences)</label>
                 <InputText
@@ -170,6 +256,19 @@ const ruleLabel = computed(() => {
                     :options="groups"
                     option-label="name"
                     placeholder="Select groups…"
+                    class="w-full"
+                    display="chip"
+                    filter
+                />
+            </div>
+
+            <div class="field">
+                <label>Individual users to notify</label>
+                <MultiSelect
+                    v-model="selectedUsers"
+                    :options="users"
+                    :option-label="userLabel"
+                    placeholder="Select users…"
                     class="w-full"
                     display="chip"
                     filter
@@ -196,6 +295,33 @@ const ruleLabel = computed(() => {
             </div>
 
             <template v-if="rule.email">
+                <div class="field email-field">
+                    <label>Send email to</label>
+                    <div
+                        v-for="option in emailRecipientOptions"
+                        :key="option.value"
+                        class="field field--inline"
+                    >
+                        <label :for="`email-to-${index}-${option.value}`">{{ option.label }}</label>
+                        <RadioButton
+                            v-model="emailRecipients"
+                            :input-id="`email-to-${index}-${option.value}`"
+                            :value="option.value"
+                        />
+                    </div>
+                </div>
+                <div
+                    v-if="emailRecipients !== 'members'"
+                    class="field email-field"
+                >
+                    <label>Extra email addresses (comma-separated)</label>
+                    <InputText
+                        :model-value="emailAddressesText"
+                        class="w-full"
+                        placeholder="e.g. heritage@example.gov.au"
+                        @change="updateEmailAddresses"
+                    />
+                </div>
                 <div class="field email-field">
                     <label>Email template</label>
                     <Select
