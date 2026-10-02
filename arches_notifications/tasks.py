@@ -5,7 +5,7 @@ import logging
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.mail import EmailMultiAlternatives, mail_admins
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.template.loader import render_to_string
 
 from arches.app.models import models
@@ -49,7 +49,6 @@ def deliver(notification_id, address: str, username: str) -> None:
         "email": address,
         "username": username,
         "notification_title": notification.notiftype.name,
-        "app_title": getattr(settings, "APP_TITLE", "Arches"),
     }
     body = render_to_string(notification.notiftype.emailtemplate, context)
     message = EmailMultiAlternatives(
@@ -89,13 +88,16 @@ def alert_admins(failure: NotificationFailure) -> None:
         context={"resource_instance_id": failure.resource_instance_id},
         notiftype_id=FAILURE_NOTIFICATION_TYPE_ID,
     )
-    # bulk_create: core's post_save handler would try to email each admin,
-    # and email is what just failed.
+    superusers = list(User.objects.filter(is_superuser=True, is_active=True))
+    # bulk_create: core's post_save handler would email each row itself and
+    # swallow any failure; the email is sent below instead.
     models.UserXNotification.objects.bulk_create(
-        models.UserXNotification(notif=alert, recipient=user)
-        for user in User.objects.filter(is_superuser=True, is_active=True)
+        models.UserXNotification(notif=alert, recipient=user) for user in superusers
     )
+    addresses = [user.email for user in superusers if user.email]
+    if not addresses:
+        return
     try:
-        mail_admins("Notification email failed", message)
+        send_mail("Notification email failed", message, settings.DEFAULT_FROM_EMAIL, addresses)
     except Exception:
-        logger.exception("Could not email admins about notification failure %s", failure.pk)
+        logger.exception("Could not email superusers about notification failure %s", failure.pk)

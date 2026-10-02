@@ -222,7 +222,7 @@ The app sends rule emails itself rather than leaving them to core's
   (time, notification type, resource id, recipient, error, attempts).
 - Admins are then alerted: a bell notification ("Notification email
   failed") for every active superuser — which works even when email is
-  what's broken — plus `mail_admins()` to `settings.ADMINS` if set. The
+  what's broken — plus an email to each of them that has an address. The
   alert omits the recipient and error text, which are on the failure row.
 - A failure never changes the resource.
 
@@ -369,7 +369,6 @@ The context passed to email templates includes:
 | `resource_instance_id` | UUID string. |
 | `resource_id` | The processed display name (after prefix/suffix handling). |
 | `notification_title` | The rule's notification name (also the email subject). |
-| `app_title` | `settings.APP_TITLE`. |
 
 Plus anything returned by your `extra_context()` strategy hook.
 
