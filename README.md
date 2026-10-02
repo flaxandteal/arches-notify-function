@@ -72,7 +72,9 @@ resource graph.
      *Resource copied*. Created/copied mean the resource was inserted in the
      same database transaction as the tile save; copied means it has no core
      `create` edit-log entry (`Resource.copy()` saves are logged `copy`).
-     Everything else is an update. Needs the save to run in a transaction,
+     Everything else is an update. A copy made in the same transaction
+     that creates a new resource (e.g. a first-version snapshot) is part of
+     that creation: it fires *Any save* rules but not *Resource copied*. Needs the save to run in a transaction,
      which Arches' tile view, `Resource.save()` callers using `atomic()`, and
      most integrations do; outside one, a new resource reads as updated.
    - **Saved by** — *Anyone*, *A signed-in user*, or *The system* (no user

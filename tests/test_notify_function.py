@@ -115,3 +115,9 @@ def test_saved_by_system_only_when_no_user():
 
 def test_repeat_saves_in_one_transaction_send_once():
     assert _post_save_sends("created", saves=3) == 1
+
+
+def test_copy_made_during_creation_only_matches_any():
+    assert _post_save_sends(nf.COPIED_DURING_CREATE, fire_on="copied") == 0
+    assert _post_save_sends(nf.COPIED_DURING_CREATE, fire_on="created") == 0
+    assert _post_save_sends(nf.COPIED_DURING_CREATE, fire_on="any") == 1

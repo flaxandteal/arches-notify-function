@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# An event no rule's fire_on names, so only "any" rules match it.
+COPIED_DURING_CREATE = "copied_during_create"
+
 
 # Read by `python manage.py fn register --source <path>/notify_function.py`.
 # triggering_nodegroups stays [] so Arches fires post_save for every nodegroup;
@@ -213,6 +216,11 @@ class NotifyFunction(BaseFunction):
         from arches.app.models.models import EditLog
         if EditLog.objects.filter(resourceinstanceid=resource_id, edittype="create").exists():
             return FIRE_ON_CREATED
+        # A copy taken while creating a new resource (e.g. a first-version
+        # snapshot) belongs to that creation, so no "copied" rule fires for it.
+        others = state["created"] - {resource_id}
+        if EditLog.objects.filter(resourceinstanceid__in=others, edittype="create").exists():
+            return COPIED_DURING_CREATE
         return FIRE_ON_COPIED
 
     def _send(self, tile, request: HttpRequest, user: User | None, config: NotificationConfig) -> None:
