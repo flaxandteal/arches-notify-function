@@ -6,7 +6,10 @@ from django.views import View
 
 from arches.app.utils.decorators import group_required
 
-from arches_notifications.notification_config import DEFAULT_NOTIFICATION_TYPE_ID
+from arches_notifications.notification_config import (
+    DEFAULT_EMAIL_TEMPLATE,
+    DEFAULT_NOTIFICATION_TYPE_ID,
+)
 
 graph_editor_required = method_decorator(
     group_required("Graph Editor"), name="dispatch"
@@ -14,7 +17,7 @@ graph_editor_required = method_decorator(
 
 
 DEFAULT_EMAIL_TEMPLATES = [
-    {"path": "email/general_notification.htm", "label": "General notification"},
+    {"path": DEFAULT_EMAIL_TEMPLATE, "label": "Notification"},
 ]
 
 

@@ -44,7 +44,13 @@ def send_notification_email(self, notification_id: str, address: str, username: 
 
 def deliver(notification_id, address: str, username: str) -> None:
     notification = models.Notification.objects.select_related("notiftype").get(pk=notification_id)
-    context = {**notification.context, "email": address, "username": username}
+    context = {
+        **notification.context,
+        "email": address,
+        "username": username,
+        "notification_title": notification.notiftype.name,
+        "app_title": getattr(settings, "APP_TITLE", "Arches"),
+    }
     body = render_to_string(notification.notiftype.emailtemplate, context)
     message = EmailMultiAlternatives(
         notification.notiftype.name, body, settings.DEFAULT_FROM_EMAIL, [address]

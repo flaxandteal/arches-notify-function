@@ -5,7 +5,9 @@ from uuid import UUID
 # rule does not specify its own type. Override by editing the rule's JSON
 # config directly if you want a different NotificationType per rule.
 DEFAULT_NOTIFICATION_TYPE_ID = UUID("a85b3f1c-7d4e-4d5a-9b5e-2a3b4c5d6e7f")
-DEFAULT_EMAIL_TEMPLATE = "email/general_notification.htm"
+# Namespaced: other apps (e.g. arches_search) ship their own
+# email/general_notification.htm, which can shadow a same-named template here.
+DEFAULT_EMAIL_TEMPLATE = "email/arches_notifications/notification.htm"
 
 # Which resource event a rule fires on.
 FIRE_ON_ANY = "any"

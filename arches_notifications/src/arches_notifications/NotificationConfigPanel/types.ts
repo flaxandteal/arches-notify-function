@@ -4,7 +4,7 @@ export interface ResourceNameConfig {
     strip_suffix: string | null;
 }
 
-export const DEFAULT_EMAIL_TEMPLATE = "email/general_notification.htm";
+export const DEFAULT_EMAIL_TEMPLATE = "email/arches_notifications/notification.htm";
 
 export type FireOn = "any" | "created" | "updated" | "copied";
 

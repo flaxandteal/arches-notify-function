@@ -9,6 +9,7 @@ from django.db import transaction
 from arches.app.functions.base import BaseFunction
 
 from arches_notifications.notification_config import (
+    DEFAULT_EMAIL_TEMPLATE,
     FIRE_ON_ANY,
     FIRE_ON_COPIED,
     FIRE_ON_CREATED,
@@ -152,7 +153,7 @@ class NotifyFunction(BaseFunction):
                 typeid=type_id,
                 defaults={
                     "name": rule.get("notification_name") or default_name,
-                    "emailtemplate": rule.get("emailtemplate") or "email/general_notification.htm",
+                    "emailtemplate": rule.get("emailtemplate") or DEFAULT_EMAIL_TEMPLATE,
                     "emailnotify": bool(rule.get("email")),
                     "webnotify": True,
                 },

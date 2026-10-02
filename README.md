@@ -343,11 +343,13 @@ To add project-specific templates:
 ```python
 # settings.py
 ARCHES_NOTIFICATIONS_EMAIL_TEMPLATES = [
-    {"path": "email/general_notification.htm", "label": "General notification"},
+    {"path": "email/arches_notifications/notification.htm", "label": "Notification"},
     {"path": "email/curator_review.htm",      "label": "Curator review"},
     {"path": "email/digest.htm",              "label": "Daily digest"},
 ]
 ```
+
+Keep project templates under a namespaced folder (the default is `email/arches_notifications/notification.htm`): several Arches apps ship their own `email/general_notification.htm`, and whichever app is first in `INSTALLED_APPS` silently wins.
 
 Each `path` must resolve through Django's template loaders. Drop the `.htm`
 file under any installed app's `templates/email/` directory.
@@ -364,6 +366,8 @@ The context passed to email templates includes:
 | `resource_link` | Relative path to the resource's report page (`/report/<id>`). Always set. |
 | `resource_instance_id` | UUID string. |
 | `resource_id` | The processed display name (after prefix/suffix handling). |
+| `notification_title` | The rule's notification name (also the email subject). |
+| `app_title` | `settings.APP_TITLE`. |
 
 Plus anything returned by your `extra_context()` strategy hook.
 
@@ -484,7 +488,7 @@ one-to-one.
 | `message` | `str` | — | Body. `{name}` is replaced with the resource display name. |
 | `notiftype_id` | `UUID` | auto-generated per rule by the UI | Primary key of the rule's own `NotificationType`. Upserted by `after_function_save`. Legacy rules without one fall back to `DEFAULT_NOTIFICATION_TYPE_ID` from migration 0001. |
 | `notification_name` | `str \| None` | derived from `"{graph} — {nodegroup_alias}"` | Becomes `NotificationType.name`. Shown to users in their email-preferences UI. |
-| `emailtemplate` | `str` | `"email/general_notification.htm"` | Django template path used to render the email body. Becomes `NotificationType.emailtemplate`. |
+| `emailtemplate` | `str` | `"email/arches_notifications/notification.htm"` | Django template path used to render the email body. Becomes `NotificationType.emailtemplate`. |
 | `groups_to_notify` | `list[str]` | `[]` | Django auth group names. Tile-save user is excluded. |
 | `email` | `bool` | `False` | Also send an email rendered from `NotificationType.emailtemplate`. |
 | `users_to_notify` | `list[int]` | `[]` | User ids notified alongside `groups_to_notify`. Tile-save user is excluded. |
