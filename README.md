@@ -68,11 +68,27 @@ resource graph.
    - **Specific node** — optional. If set, the rule only fires when the
      **value of this node changed** during the save. Leave blank to fire
      on every tile save in the nodegroup.
+   - **Fire on** — *Any save*, *Resource created*, *Resource updated* or
+     *Resource copied*. Created/copied mean the resource was inserted in the
+     same database transaction as the tile save; copied means it has no core
+     `create` edit-log entry (`Resource.copy()` saves are logged `copy`).
+     Everything else is an update. Needs the save to run in a transaction,
+     which Arches' tile view, `Resource.save()` callers using `atomic()`, and
+     most integrations do; outside one, a new resource reads as updated.
+   - **Saved by** — *Anyone*, *A signed-in user*, or *The system* (no user
+     on the request: integrations, imports, management commands). E.g.
+     "Resource updated" + "The system" = updated by an integration, not by
+     an editor.
+   Whatever the settings, a rule sends at most once per resource per
+   database transaction, so a save that touches its nodegroup several times
+   notifies once.
    - **Notification name** — what users see in their email-preferences UI
      for this rule (e.g. "Monuments — Status changed"). Leave blank to
      auto-derive from the graph and nodegroup names.
    - **Groups to notify** — Django auth groups whose members will receive
      the notification. The user who saved the tile is always excluded.
+   - **Individual users to notify** — specific users, alongside or instead
+     of groups. Stored by user id, so renaming a user doesn't break the rule.
    - **Message** — body of the notification. Supports two tokens:
      - `{name}` — interpolates the resource's display name.
      - `{value:<node_alias>}` — interpolates the value of any node in the
@@ -80,6 +96,12 @@ resource graph.
        Unknown aliases stay literal so typos are visible.
    - **Send email** — when checked, an HTML email is also sent. Shows
      extra fields:
+     - **Send email to** — *Selected groups and users* (each person's own
+       address), *Selected groups and users, plus extra addresses*, or
+       *Only extra addresses*. Selected groups and users always get the
+       in-app bell, whichever is picked.
+     - **Extra email addresses** — comma-separated; emailed directly, so
+       they need no Arches account (and get no bell).
      - **Email template** — the Django template that renders the email.
        Projects can extend the dropdown by setting
        `ARCHES_NOTIFICATIONS_EMAIL_TEMPLATES` (see [Adding email templates](#adding-email-templates)).
@@ -185,6 +207,26 @@ Each recipient User needs a non-empty `email` field, and a row in
 `UserXNotificationType` opting **out** of email for that type suppresses
 the send. By default users are opted in.
 
+### Delivery, retries and failure alerts
+
+The app sends rule emails itself rather than leaving them to core's
+`send_email_on_save`, which swallows failures. Bell rows are created with
+`bulk_create` so core's handler never fires for them.
+
+- With a Celery worker (`check_if_celery_available()`), each email is a
+  `send_notification_email` task retried 3 times, 1, 2 and 4 minutes apart.
+  Without one, it is sent once, inline.
+- An email that still fails is saved as a `NotificationFailure` row
+  (time, notification type, resource id, recipient, error, attempts).
+- Admins are then alerted: a bell notification ("Notification email
+  failed") for every active superuser — which works even when email is
+  what's broken — plus `mail_admins()` to `settings.ADMINS` if set. The
+  alert omits the recipient and error text, which are on the failure row.
+- A failure never changes the resource.
+
+Only failures the mail server reports at send time are caught. A message
+accepted and later bounced by the recipient's server is not.
+
 ---
 
 ## Architecture
@@ -220,20 +262,16 @@ Five moving parts. Knowing how they fit together makes it easier to extend.
 │  NotifyFunction.post_save(tile, request, context)  ← after DB write │
 │    └─ for each matching rule:                                       │
 │        ├─ if rule has node_alias: check it changed, else skip rule  │
-│        └─ instantiate strategy (default or override), send          │
+│        └─ queue send for transaction commit (all tiles + name saved)│
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  NotificationStrategy.send_notification()                           │
 │    ├─ resolve resource display name (with prefix/suffix processing) │
-│    ├─ skip if duplicate of last notification on this resource       │
 │    ├─ create Notification row                                       │
-│    └─ create UserXNotification rows for each recipient              │
-│                                                                     │
-│  Arches' core `send_email_on_save` signal handler                   │
-│  picks up new UserXNotification rows and sends emails               │
-│  for any whose NotificationType has emailtemplate set.              │
+│    ├─ bulk_create UserXNotification (bell) rows — no core email     │
+│    └─ tasks.queue_email per address → Celery retry → failure alert  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -399,8 +437,8 @@ class DecisionStrategy(NotificationStrategy):
 
 The class is short and readable — most overrides are one of the above plus a
 private helper. See `notification_base_strategy.py` for the available
-methods (`_get_resource_name`, `_get_recipients`, `_create_notification`,
-`notify_user`, `_clone_notification_for_user`, `get_domain_value_string`).
+methods (`_get_resource_name`, `_get_recipients`, `_email_recipients`,
+`_create_notification`, `get_domain_value_string`).
 
 ### Strategy attributes
 
@@ -440,6 +478,8 @@ one-to-one.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `nodegroup_alias` | `str` | — | Required. Alias of the nodegroup whose tile saves trigger this rule. |
+| `fire_on` | `str` | `"any"` | `any`, `created`, `updated` or `copied` — see **Fire on** above. |
+| `saved_by` | `str` | `"anyone"` | `anyone`, `user` (signed-in) or `system` (no user on the request). |
 | `node_alias` | `str \| None` | `None` | When set, only fire when this node's value changed. |
 | `message` | `str` | — | Body. `{name}` is replaced with the resource display name. |
 | `notiftype_id` | `UUID` | auto-generated per rule by the UI | Primary key of the rule's own `NotificationType`. Upserted by `after_function_save`. Legacy rules without one fall back to `DEFAULT_NOTIFICATION_TYPE_ID` from migration 0001. |
@@ -447,6 +487,9 @@ one-to-one.
 | `emailtemplate` | `str` | `"email/general_notification.htm"` | Django template path used to render the email body. Becomes `NotificationType.emailtemplate`. |
 | `groups_to_notify` | `list[str]` | `[]` | Django auth group names. Tile-save user is excluded. |
 | `email` | `bool` | `False` | Also send an email rendered from `NotificationType.emailtemplate`. |
+| `users_to_notify` | `list[int]` | `[]` | User ids notified alongside `groups_to_notify`. Tile-save user is excluded. |
+| `email_recipients` | `str` | `"members"` | `members`, `members_and_extra` or `extra_only`. Where the email goes; group members get the bell regardless. |
+| `email_addresses` | `list[str]` | `[]` | Extra addresses emailed directly. Used by the last two modes; an address a member already gets is not emailed twice. |
 | `button_text` | `str` | `"View resource"` | Email CTA label. |
 | `link_path` | `str` | `""` | Email CTA href. Empty means "link to the resource report page" — the strategy substitutes `/report/<resource_instance_id>` at send time. Set to e.g. `/index.htm` for a fixed destination. |
 | `resource_name` | `ResourceNameConfig` | empty | Optional `require_prefix` / `strip_prefix` / `strip_suffix`. |

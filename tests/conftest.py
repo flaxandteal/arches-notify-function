@@ -32,7 +32,7 @@ except Exception:
     models_mod = _stub("arches.app.models.models")
     # Notification code references these as models.<X>; bare placeholders
     # are enough for the import + the unit tests patch around the ORM.
-    for cls_name in ("Tile", "Notification", "UserXNotification", "Node"):
+    for cls_name in ("Tile", "Notification", "UserXNotification", "Node", "ResourceInstance"):
         setattr(models_mod, cls_name, type(cls_name, (), {"objects": None}))
     # `from arches.app.models import models` resolves the submodule.
     sys.modules["arches.app.models"].models = models_mod

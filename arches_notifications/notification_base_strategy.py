@@ -39,6 +39,7 @@ class NotificationStrategy:
         self.notification: models.Notification | None = None
 
     def send_notification(self) -> None:
+        from .tasks import queue_email
         if self.name is None:
             # require_prefix filter explicitly rejected this resource.
             return
@@ -46,12 +47,20 @@ class NotificationStrategy:
         message = self._render_message(self.config.message)
 
         recipients = self._get_recipients()
-        if not recipients:
+        emails = self._email_recipients(recipients)
+        if not recipients and not emails:
             return
 
         self.notification = self._create_notification(message)
-        for user in recipients:
-            self.notify_user(user)
+        # bulk_create skips core's post_save handler, which would email each
+        # recipient itself and swallow failures; tasks.queue_email retries
+        # and reports them instead.
+        models.UserXNotification.objects.bulk_create(
+            models.UserXNotification(notif=self.notification, recipient=user)
+            for user in recipients
+        )
+        for address, username in emails:
+            queue_email(self.notification.pk, address, username)
 
     def extra_context(self) -> dict:
         """Override in a subclass to inject extra notification context fields.
@@ -111,15 +120,7 @@ class NotificationStrategy:
             "link": resource_path,
         }
         if self.config.email:
-            email_link = self._absolute_uri(self.config.link_path or resource_path)
-            context.update({
-                "greeting": message,
-                "salutation": "Hi",
-                "username": "",
-                "email": "",
-                "email_link": email_link,
-                "button_text": self.config.button_text,
-            })
+            context.update(self._email_context(message))
         context.update(self.extra_context())
         notification = models.Notification(
             message=message,
@@ -129,39 +130,53 @@ class NotificationStrategy:
         notification.save()
         return notification
 
+    def _email_context(self, message: str) -> dict:
+        resource_path = f"/report/{self.resource_instance_id}"
+        return {
+            "greeting": message,
+            "salutation": "Hi",
+            "username": "",
+            "email": "",
+            "email_link": self._absolute_uri(self.config.link_path or resource_path),
+            "button_text": self.config.button_text,
+        }
+
     def _get_recipients(self) -> list[User]:
         from django.contrib.auth.models import User
+        from django.db.models import Q
         return list(
-            User.objects.filter(groups__name__in=self.config.groups_to_notify)
+            User.objects.filter(
+                Q(groups__name__in=self.config.groups_to_notify)
+                | Q(pk__in=self.config.users_to_notify)
+            )
             .exclude(pk=self.user.pk if self.user else None)
             .distinct()
         )
 
-    def notify_user(self, user: User) -> None:
-        if self.config.email:
-            notif = self._clone_notification_for_user(user)
-        else:
-            notif = self.notification
-        models.UserXNotification(notif=notif, recipient=user).save()
-
-    def _clone_notification_for_user(self, user: User) -> models.Notification:
-        """Per-user copy of the notification (the email branch needs the
-        recipient's username/email baked into context).
-
-        TODO: called once per recipient from the loop in notify_user, so a
-        rule targeting a large group — or several groups, transitively —
-        costs N Notification.save() round-trips plus N UserXNotification
-        saves. Refactor send_notification to build all clones and join
-        rows and bulk_create() them (two queries instead of 2N).
-        """
-        context = {**self.notification.context, "username": user.username, "email": user.email}
-        notif = models.Notification(
-            message=self.notification.message,
-            context=context,
-            notiftype_id=self.notification.notiftype_id,
-        )
-        notif.save()
-        return notif
+    def _email_recipients(self, recipients: list[User]) -> list[tuple[str, str]]:
+        """(address, username) pairs to email: members who haven't opted out
+        of this notification type's email, then extra addresses not already
+        covered."""
+        emails: list[tuple[str, str]] = []
+        if self.config.emails_members:
+            opted_out = set(
+                models.UserXNotificationType.objects.filter(
+                    notiftype_id=self.config.notiftype_id, emailnotify=False
+                ).values_list("user_id", flat=True)
+            )
+            emails += [
+                (user.email, user.username)
+                for user in recipients
+                if user.email and user.pk not in opted_out
+            ]
+        if self.config.emails_extra:
+            already = {address.lower() for address, _ in emails}
+            emails += [
+                (address, "")
+                for address in self.config.email_addresses
+                if address.lower() not in already
+            ]
+        return emails
 
     def get_domain_value_string(
         self, value_id: str, node_id: str, language: str | None = None

@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, User
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -62,6 +62,19 @@ class GroupsView(View):
     def get(self, request):
         groups = list(Group.objects.values("id", "name").order_by("name"))
         return JsonResponse({"groups": groups})
+
+
+@graph_editor_required
+class UsersView(View):
+    """Return active users for the function config UI's individual-recipient picker."""
+
+    def get(self, request):
+        users = list(
+            User.objects.filter(is_active=True)
+            .values("id", "username", "email")
+            .order_by("username")
+        )
+        return JsonResponse({"users": users})
 
 
 @graph_editor_required

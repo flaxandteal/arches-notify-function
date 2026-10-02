@@ -4,6 +4,7 @@ import type {
     EmailTemplateOption,
     GroupOption,
     NodegroupOption,
+    UserOption,
 } from "./types.ts";
 
 export async function fetchGroups(): Promise<GroupOption[]> {
@@ -11,6 +12,13 @@ export async function fetchGroups(): Promise<GroupOption[]> {
     if (!res.ok) throw new Error(`Failed to fetch groups (${res.status})`);
     const data = await res.json();
     return data.groups ?? [];
+}
+
+export async function fetchUsers(): Promise<UserOption[]> {
+    const res = await fetch(arches.urls.notification_users);
+    if (!res.ok) throw new Error(`Failed to fetch users (${res.status})`);
+    const data = await res.json();
+    return data.users ?? [];
 }
 
 export async function fetchNodegroups(graphId: string): Promise<NodegroupOption[]> {
